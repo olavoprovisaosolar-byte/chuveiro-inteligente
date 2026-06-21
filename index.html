@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Chuveiro Inteligente</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header__brand">
+        <div class="header__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Chuveiro Inteligente</h1>
+          <p class="header__status" id="connectionStatus">Conectando...</p>
+        </div>
+      </div>
+      <button class="btn-icon" id="btnHelp" aria-label="Ajuda">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Protection Alert Banner -->
+    <div class="alert-banner alert-banner--hidden" id="protectionAlert">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <div>
+        <strong>Proteção Ativada</strong>
+        <span id="protectionReason">Desarmamento por segurança</span>
+      </div>
+      <button class="alert-banner__reset" id="btnResetProtection">Resetar</button>
+    </div>
+
+    <!-- Main Power Toggle -->
+    <section class="card card--power">
+      <div class="power-toggle">
+        <button class="power-btn" id="btnPower" aria-pressed="false" aria-label="Ligar/Desligar chuveiro">
+          <div class="power-btn__ring">
+            <div class="power-btn__inner">
+              <svg class="power-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                <line x1="12" y1="2" x2="12" y2="12"/>
+              </svg>
+              <span class="power-btn__label" id="powerLabel">DESLIGADO</span>
+            </div>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <!-- Power/Resistance Control -->
+    <section class="card">
+      <div class="card__header">
+        <h2>Potência / Resistência</h2>
+        <span class="badge" id="powerValue">50%</span>
+      </div>
+      <div class="slider-container">
+        <input type="range" id="powerSlider" min="0" max="100" value="50" step="1" aria-label="Controle de potência">
+        <div class="slider-labels">
+          <span>Mín</span>
+          <span>Médio</span>
+          <span>Máx</span>
+        </div>
+      </div>
+      <div class="circular-gauge">
+        <svg viewBox="0 0 120 120" class="gauge-svg">
+          <circle cx="60" cy="60" r="52" class="gauge-bg"/>
+          <circle cx="60" cy="60" r="52" class="gauge-fill" id="gaugeFill"/>
+        </svg>
+        <div class="gauge-center">
+          <span class="gauge-value" id="gaugeValue">50</span>
+          <span class="gauge-unit">%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Real-time Monitoring -->
+    <section class="card">
+      <div class="card__header">
+        <h2>Monitoramento</h2>
+        <span class="live-dot" id="liveIndicator">● Ao vivo</span>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric">
+          <div class="metric__icon metric__icon--resistance">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </div>
+          <div class="metric__info">
+            <span class="metric__label">Resistência</span>
+            <span class="metric__value" id="metricResistance">— Ω</span>
+          </div>
+          <span class="metric__status metric__status--ok" id="statusResistance">Normal</span>
+        </div>
+        <div class="metric">
+          <div class="metric__icon metric__icon--current">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div class="metric__info">
+            <span class="metric__label">Corrente</span>
+            <span class="metric__value" id="metricCurrent">— A</span>
+          </div>
+          <span class="metric__status metric__status--ok" id="statusCurrent">Normal</span>
+        </div>
+        <div class="metric">
+          <div class="metric__icon metric__icon--leak">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <div class="metric__info">
+            <span class="metric__label">Fuga de Corrente</span>
+            <span class="metric__value" id="metricLeakage">— mA</span>
+          </div>
+          <span class="metric__status metric__status--ok" id="statusLeakage">Normal</span>
+        </div>
+        <div class="metric">
+          <div class="metric__icon metric__icon--temp">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+            </svg>
+          </div>
+          <div class="metric__info">
+            <span class="metric__label">Temperatura</span>
+            <span class="metric__value" id="metricTemp">— °C</span>
+          </div>
+          <span class="metric__status metric__status--ok" id="statusTemp">Normal</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Auto Temperature Shut-off -->
+    <section class="card">
+      <div class="card__header">
+        <h2>Desligamento Automático</h2>
+        <label class="switch">
+          <input type="checkbox" id="autoTempEnabled">
+          <span class="switch__slider"></span>
+        </label>
+      </div>
+      <p class="card__desc">Desliga o chuveiro quando a temperatura atingir o limite definido.</p>
+      <div class="temp-control" id="tempControl">
+        <label for="tempLimit">Temperatura limite</label>
+        <div class="temp-input-group">
+          <button class="btn-step" id="btnTempDown" aria-label="Diminuir temperatura">−</button>
+          <input type="number" id="tempLimit" min="20" max="60" value="30" step="1">
+          <span class="temp-unit">°C</span>
+          <button class="btn-step" id="btnTempUp" aria-label="Aumentar temperatura">+</button>
+        </div>
+        <input type="range" id="tempSlider" min="20" max="60" value="30" step="1" aria-label="Temperatura limite">
+      </div>
+    </section>
+
+    <!-- Connection Settings -->
+    <section class="card card--settings">
+      <div class="card__header">
+        <h2>Conexão MQTT</h2>
+      </div>
+      <div class="form-group">
+        <label for="mqttBroker">Broker</label>
+        <input type="text" id="mqttBroker" value="broker.hivemq.com" placeholder="broker.hivemq.com">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="mqttPort">Porta WS</label>
+          <input type="number" id="mqttPort" value="8000" placeholder="8000">
+        </div>
+        <div class="form-group">
+          <label for="deviceId">ID do Dispositivo</label>
+          <input type="text" id="deviceId" value="chuveiro_01" placeholder="chuveiro_01">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="simulationMode" checked>
+          <span>Modo simulação (sem ESP32)</span>
+        </label>
+      </div>
+      <button class="btn btn--primary" id="btnConnect">Conectar</button>
+    </section>
+
+    <footer class="footer">
+      <p>Chuveiro Elétrico Inteligente v1.0</p>
+    </footer>
+  </div>
+
+  <!-- Onboarding Modal -->
+  <div class="modal-overlay" id="onboardingModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
+      <div class="modal__header">
+        <div class="modal__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+          </svg>
+        </div>
+        <h2 id="modalTitle">Bem-vindo ao Chuveiro Inteligente</h2>
+      </div>
+      <div class="modal__body">
+        <div class="feature-list">
+          <div class="feature-item">
+            <div class="feature-item__icon feature-item__icon--blue">⚡</div>
+            <div>
+              <strong>Controle Remoto</strong>
+              <p>Ligue, desligue e ajuste a potência do chuveiro diretamente pelo celular.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-item__icon feature-item__icon--green">🛡️</div>
+            <div>
+              <strong>Proteção Elétrica</strong>
+              <p>Monitoramento em tempo real de corrente e fuga. Desarme automático em caso de falha.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-item__icon feature-item__icon--orange">🌡️</div>
+            <div>
+              <strong>Timer por Temperatura</strong>
+              <p>Configure um limite de temperatura para desligamento automático e economia de energia.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-item__icon feature-item__icon--purple">📡</div>
+            <div>
+              <strong>Conexão MQTT</strong>
+              <p>Comunicação segura com o ESP32 via broker MQTT (HiveMQ, Adafruit IO, etc.).</p>
+            </div>
+          </div>
+        </div>
+        <label class="checkbox-label modal__checkbox">
+          <input type="checkbox" id="dontShowAgain">
+          <span>Não mostrar novamente</span>
+        </label>
+      </div>
+      <div class="modal__footer">
+        <button class="btn btn--primary btn--full" id="btnCloseOnboarding">Entendi, vamos começar!</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
