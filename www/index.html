@@ -13,6 +13,7 @@
 </head>
 <body>
   <div class="app">
+    <!-- Header -->
     <header class="header">
       <div class="header__brand">
         <div class="header__icon">
@@ -34,6 +35,7 @@
       </button>
     </header>
 
+    <!-- Protection Alert Banner -->
     <div class="alert-banner alert-banner--hidden" id="protectionAlert">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -47,6 +49,7 @@
       <button class="alert-banner__reset" id="btnResetProtection">Resetar</button>
     </div>
 
+    <!-- Main Power Toggle -->
     <section class="card card--power">
       <div class="power-toggle">
         <button class="power-btn" id="btnPower" aria-pressed="false" aria-label="Ligar/Desligar chuveiro">
@@ -63,6 +66,7 @@
       </div>
     </section>
 
+    <!-- Power/Resistance Control -->
     <section class="card">
       <div class="card__header">
         <h2>Potência / Resistência</h2>
@@ -88,6 +92,7 @@
       </div>
     </section>
 
+    <!-- Real-time Monitoring -->
     <section class="card">
       <div class="card__header">
         <h2>Monitoramento</h2>
@@ -147,6 +152,7 @@
       </div>
     </section>
 
+    <!-- Auto Temperature Shut-off -->
     <section class="card">
       <div class="card__header">
         <h2>Desligamento Automático</h2>
@@ -168,6 +174,7 @@
       </div>
     </section>
 
+    <!-- Connection Settings -->
     <section class="card card--settings">
       <div class="card__header">
         <h2>Conexão MQTT</h2>
@@ -195,16 +202,38 @@
       <button class="btn btn--primary" id="btnConnect">Conectar</button>
     </section>
 
+    <!-- Download APK -->
+    <section class="card card--download">
+      <div class="card__header">
+        <h2>Baixar APK</h2>
+      </div>
+      <p class="card__desc">Instale o aplicativo Android no celular.</p>
+      <a class="btn btn--apk-download" id="btnDownloadApk"
+         href="https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/raw/cursor/app-apk-download-links-235e/downloads/ChuveiroInteligente.apk"
+         download="ChuveiroInteligente.apk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Baixar ChuveiroInteligente.apk
+      </a>
+      <p class="download-fallback">
+        <a href="downloads/ChuveiroInteligente.apk" download="ChuveiroInteligente.apk">Link local</a>
+        ·
+        <a href="download.html">Página de download</a>
+      </p>
+    </section>
+
     <footer class="footer">
       <p>Chuveiro Elétrico Inteligente v1.0</p>
       <p class="footer__download">
-        <a href="https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/latest/download/ChuveiroInteligente.apk" target="_blank" rel="noopener noreferrer">Baixar APK</a>
-        ·
-        <a href="https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/blob/master/download.html" target="_blank" rel="noopener noreferrer">Página de download</a>
+        <a href="https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/raw/cursor/app-apk-download-links-235e/downloads/ChuveiroInteligente.apk" download="ChuveiroInteligente.apk">Baixar APK</a>
       </p>
     </footer>
   </div>
 
+  <!-- Onboarding Modal -->
   <div class="modal-overlay" id="onboardingModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal">
       <div class="modal__header">
