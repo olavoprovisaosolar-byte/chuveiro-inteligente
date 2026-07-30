@@ -699,6 +699,20 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text-muted);
 }
 
+.footer__download {
+  margin-top: 8px;
+}
+
+.footer__download a {
+  color: var(--accent-blue);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.footer__download a:hover {
+  text-decoration: underline;
+}
+
 /* ===== Modal ===== */
 .modal-overlay {
   position: fixed;
