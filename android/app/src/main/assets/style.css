@@ -699,6 +699,69 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text-muted);
 }
 
+.footer__download {
+  margin-top: 8px;
+}
+
+.footer__download a {
+  color: var(--accent-blue);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.footer__download a:hover {
+  text-decoration: underline;
+}
+
+.card--download {
+  margin-bottom: 8px;
+}
+
+.btn--apk-download {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 20px;
+  background: var(--accent-green);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn--apk-download svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.btn--apk-download:hover {
+  background: var(--accent-green-dark);
+}
+
+.download-fallback {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.download-fallback a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+.download-fallback a:hover {
+  text-decoration: underline;
+}
+
 /* ===== Modal ===== */
 .modal-overlay {
   position: fixed;

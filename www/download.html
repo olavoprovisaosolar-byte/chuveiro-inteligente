@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
+  <title>Baixar — Chuveiro Inteligente</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .download-page {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .download-hero {
+      text-align: center;
+      padding: 32px 0 28px;
+    }
+
+    .download-hero__icon {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 20px;
+      background: linear-gradient(135deg, var(--accent-blue), #6366f1);
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: var(--shadow-md);
+    }
+
+    .download-hero__icon svg {
+      width: 36px;
+      height: 36px;
+    }
+
+    .download-hero h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    .download-hero p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      max-width: 320px;
+      margin: 0 auto;
+    }
+
+    .download-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .btn--download {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-decoration: none;
+      padding: 16px 24px;
+      font-size: 1rem;
+    }
+
+    .btn--download svg {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+
+    .btn--secondary {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      width: 100%;
+    }
+
+    .btn--secondary:hover {
+      background: var(--bg-card-hover);
+    }
+
+    .btn--apk {
+      background: var(--accent-green);
+      color: white;
+      width: 100%;
+    }
+
+    .btn--apk:hover {
+      background: var(--accent-green-dark);
+    }
+
+    .download-meta {
+      margin-top: 28px;
+      padding: 16px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+    }
+
+    .download-meta h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .download-meta ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .download-meta li {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .download-meta strong {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .download-note {
+      margin-top: 20px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .download-back {
+      margin-top: auto;
+      padding-top: 32px;
+      text-align: center;
+    }
+
+    .download-back a {
+      color: var(--accent-blue);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .download-back a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="download-page">
+    <header class="download-hero">
+      <div class="download-hero__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+        </svg>
+      </div>
+      <h1>Chuveiro Inteligente</h1>
+      <p>Baixe o aplicativo Android ou abra a versão web no navegador.</p>
+    </header>
+
+    <section class="download-actions" aria-label="Opções de download">
+      <a class="btn btn--download btn--apk"
+         href="https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/raw/cursor/app-apk-download-links-235e/downloads/ChuveiroInteligente.apk"
+         download="ChuveiroInteligente.apk"
+         id="btnDownloadApk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Baixar APK (Android)
+      </a>
+      <a class="btn btn--download btn--secondary" href="../downloads/ChuveiroInteligente.apk" download="ChuveiroInteligente.apk">
+        Baixar APK (arquivo local)
+      </a>
+
+      <a class="btn btn--download btn--secondary" href="index.html" id="btnOpenWeb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+        Abrir aplicativo web
+      </a>
+
+      <a class="btn btn--download btn--secondary" href="https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/latest" id="btnLatestRelease" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+        </svg>
+        Ver releases no GitHub
+      </a>
+    </section>
+
+    <div class="download-meta">
+      <h2>Detalhes do APK</h2>
+      <ul>
+        <li><span>Arquivo</span> <strong>ChuveiroInteligente.apk</strong></li>
+        <li><span>Versão</span> <strong>1.0.0 (debug)</strong></li>
+        <li><span>Plataforma</span> <strong>Android 7.0+</strong></li>
+        <li><span>Pacote</span> <strong>com.chuveiro.inteligente.debug</strong></li>
+      </ul>
+    </div>
+
+    <p class="download-note">
+      No Android, pode ser necessário permitir “Instalar apps desconhecidos” para o navegador ou gerenciador de arquivos.
+      Também disponível em
+      <a href="https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/latest/download/ChuveiroInteligente.apk" style="color: var(--accent-blue);">releases/latest</a>.
+    </p>
+
+    <div class="download-back">
+      <a href="index.html">← Voltar ao app</a>
+    </div>
+  </div>
+</body>
+</html>
