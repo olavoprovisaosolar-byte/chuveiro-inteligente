@@ -2,8 +2,8 @@ import * as SecureStore from 'expo-secure-store';
 import { AI_MODELS } from '../constants/modules';
 import { AiConfig, AiProvider } from '../types';
 
-const API_KEY_PREFIX = 'provisao_solar_api_key_';
-const PROVIDER_KEY = 'provisao_solar_ai_provider';
+const API_KEY_PREFIX = 'solar_calculator_api_key_';
+const PROVIDER_KEY = 'solar_calculator_ai_provider';
 
 export async function saveApiKey(provider: AiProvider, apiKey: string): Promise<void> {
   await SecureStore.setItemAsync(`${API_KEY_PREFIX}${provider}`, apiKey.trim());

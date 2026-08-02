@@ -1,4 +1,4 @@
-name: Build Provisão Solar APK
+name: Build Solar Calculator APK
 
 on:
   push:
@@ -64,13 +64,13 @@ jobs:
           mkdir -p ../artifact
           APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
           echo "Using APK: $APK_PATH"
-          cp "$APK_PATH" ../artifact/ProvisaoSolar.apk
-          ls -lh ../artifact/ProvisaoSolar.apk
-          unzip -l ../artifact/ProvisaoSolar.apk | grep -Ei 'index\.(android\.)?bundle|\.hbc|assets/.*js' | head -40 || true
+          cp "$APK_PATH" ../artifact/SolarCalculator.apk
+          ls -lh ../artifact/SolarCalculator.apk
+          unzip -l ../artifact/SolarCalculator.apk | grep -Ei 'index\.(android\.)?bundle|\.hbc|assets/.*js' | head -40 || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: provisao-solar-apk
-          path: artifact/ProvisaoSolar.apk
+          name: solar-calculator-apk
+          path: artifact/SolarCalculator.apk
           retention-days: 30

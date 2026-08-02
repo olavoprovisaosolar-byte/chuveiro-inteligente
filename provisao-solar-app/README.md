@@ -1,6 +1,6 @@
-# Provisão Solar — Dimensionamento Fotovoltaico Rápido
+# Solar Calculator — Dimensionamento Fotovoltaico Rápido
 
-Aplicativo Android (React Native + Expo + TypeScript) para:
+Aplicativo Android independente (React Native + Expo + TypeScript) para:
 
 - Dimensionamento fotovoltaico por consumo mensal ou diário
 - Gerenciador de módulos comerciais e customizados
@@ -45,11 +45,11 @@ Scripts úteis:
 
 Link direto para baixar o APK gerado:
 
-**https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/download/provisao-solar-v1.0.1/ProvisaoSolar.apk**
+**https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/download/solar-calculator-v1.1.0/SolarCalculator.apk**
 
-Página do release: https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/tag/provisao-solar-v1.0.1
+Página do release: https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/tag/solar-calculator-v1.1.0
 
-> APK **release** com o bundle JavaScript embutido (não precisa do Metro para abrir).
+> App independente **Solar Calculator** (`com.solarcalculator.app`). APK **release** com bundle JavaScript embutido (não precisa do Metro).
 
 Página auxiliar local: `provisao-solar-app/download.html`
 

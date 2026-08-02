@@ -11,7 +11,7 @@ import { useColorScheme } from 'react-native';
 import { AppColors, darkColors, lightColors } from './colors';
 import { ThemeMode } from '../types';
 
-const THEME_KEY = '@provisao_solar/theme_mode';
+const THEME_KEY = '@solar_calculator/theme_mode';
 
 type ThemeContextValue = {
   colors: AppColors;

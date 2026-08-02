@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SolarModule } from '../types';
 
-const CUSTOM_MODULES_KEY = '@provisao_solar/custom_modules';
+const CUSTOM_MODULES_KEY = '@solar_calculator/custom_modules';
 
 export async function loadCustomModules(): Promise<SolarModule[]> {
   try {

@@ -3,7 +3,7 @@
 # Pré-requisito: gh auth login
 set -euo pipefail
 
-REPO_NAME="${1:-provisao-solar-app}"
+REPO_NAME="${1:-solar-calculator}"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
@@ -23,16 +23,16 @@ else
     --private \
     --source=. \
     --remote=origin \
-    --description "App Android de dimensionamento fotovoltaico rápido (Provisão Solar)"
+    --description "Solar Calculator — app Android de dimensionamento fotovoltaico rápido"
 fi
 
 git add .
 git status
 
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
-  git commit -m "chore: update Provisão Solar app" || true
+  git commit -m "chore: update Solar Calculator app" || true
 else
-  git commit -m "Initial commit: Provisão Solar app (Expo + TypeScript)"
+  git commit -m "Initial commit: Solar Calculator app (Expo + TypeScript)"
 fi
 
 git push -u origin main

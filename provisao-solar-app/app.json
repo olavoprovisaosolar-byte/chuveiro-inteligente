@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Provisão Solar",
-    "slug": "provisao-solar-app",
-    "version": "1.0.0",
+    "name": "Solar Calculator",
+    "slug": "solar-calculator",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": "provisaosolar",
+    "scheme": "solarcalculator",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -15,17 +15,18 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.provisaosolar.app"
+      "bundleIdentifier": "com.solarcalculator.app"
     },
     "android": {
-      "package": "com.provisaosolar.app",
+      "package": "com.solarcalculator.app",
       "adaptiveIcon": {
         "backgroundColor": "#0B3D2E",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "label": "Solar Calculator"
     },
     "web": {
       "favicon": "./assets/favicon.png"

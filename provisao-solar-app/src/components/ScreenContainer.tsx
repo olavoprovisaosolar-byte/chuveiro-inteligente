@@ -33,7 +33,7 @@ export function ScreenContainer({
     <View style={[styles.content, contentStyle]}>
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
-          <Text style={[styles.brand, { color: colors.accent }]}>Provisão Solar</Text>
+          <Text style={[styles.brand, { color: colors.accent }]}>Solar Calculator</Text>
           <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
           {subtitle ? (
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
