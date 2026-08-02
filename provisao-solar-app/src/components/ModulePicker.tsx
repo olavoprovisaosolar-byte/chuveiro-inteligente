@@ -15,7 +15,7 @@ export function ModulePicker({ modules, selectedId, onSelect }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <Text style={[styles.label, { color: colors.text }]}>Módulo selecionado</Text>
+      <Text style={[styles.label, { color: colors.text }]}>Placas comerciais disponíveis</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {modules.map((module) => {
           const selected = module.id === selectedId;
