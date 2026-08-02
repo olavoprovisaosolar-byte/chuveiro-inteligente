@@ -37,17 +37,20 @@ export function suggestInverterRange(powerKwp: number): {
 
 /**
  * A partir da potência necessária (kWp) e do módulo escolhido:
- * Qtd = ceil(kWp * 1000 / Wp da placa) e inversor pela potência instalada.
+ * Qtd = ceil(kWp * 1000 / Wp da placa), área necessária (+ margem) e inversor.
  */
 export function calculateModulesForPower(
   requiredPowerKwp: number,
   module: SolarModule,
+  areaMargin: number = DEFAULT_AREA_MARGIN,
 ): {
   module: SolarModule;
   requiredPowerKwp: number;
   quantity: number;
   installedPowerKwp: number;
   grossAreaM2: number;
+  areaMargin: number;
+  requiredInstallAreaM2: number;
   inverterMinKw: number;
   inverterMaxKw: number;
 } {
@@ -55,6 +58,7 @@ export function calculateModulesForPower(
   const quantity = Math.max(1, Math.ceil(requiredWp / module.powerWp));
   const installedPowerKwp = round2((quantity * module.powerWp) / 1000);
   const grossAreaM2 = round2(quantity * module.areaM2);
+  const requiredInstallAreaM2 = round2(grossAreaM2 * (1 + areaMargin));
   const inverter = suggestInverterRange(installedPowerKwp);
   return {
     module,
@@ -62,6 +66,8 @@ export function calculateModulesForPower(
     quantity,
     installedPowerKwp,
     grossAreaM2,
+    areaMargin,
+    requiredInstallAreaM2,
     ...inverter,
   };
 }

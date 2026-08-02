@@ -52,6 +52,8 @@ assert(almostEqual(computeModuleArea(2.27, 1.13), 2.57) || almostEqual(computeMo
 const sizing = calculateModulesForPower(4.5, module550);
 assert(sizing.quantity === 9, `Qtd placas esperada 9, veio ${sizing.quantity}`);
 assert(almostEqual(sizing.installedPowerKwp, 4.95), 'Potência instalada 9x550');
+assert(almostEqual(sizing.grossAreaM2, 23.04), 'Área bruta 9x2.56');
+assert(almostEqual(sizing.requiredInstallAreaM2, 25.34), 'Área necessária +10%');
 assert(almostEqual(sizing.inverterMinKw, 4.95 / 1.3), 'Inversor min pela potência instalada');
 
 console.log('✅ Self-test de cálculos OK');

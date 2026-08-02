@@ -7,7 +7,8 @@ import { ModulePicker } from '../components/ModulePicker';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ResultCard } from '../components/ResultCard';
 import { ScreenContainer } from '../components/ScreenContainer';
-import { FACTOR_333_EXPLANATION } from '../constants/modules';
+import { SizingHighlights } from '../components/SizingHighlights';
+import { DEFAULT_AREA_MARGIN, FACTOR_333_EXPLANATION } from '../constants/modules';
 import { useAiConfig } from '../hooks/useAiConfig';
 import { useModules } from '../hooks/useModules';
 import { useTheme } from '../theme/ThemeContext';
@@ -34,6 +35,7 @@ export function DimensionamentoScreen() {
   );
   const [dailyResult, setDailyResult] = useState<ReturnType<typeof calculateFromDaily> | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | undefined>(undefined);
+  const [areaMarginPercent, setAreaMarginPercent] = useState(String(DEFAULT_AREA_MARGIN * 100));
 
   const onCalculate = () => {
     const value = parseLocaleNumber(input);
@@ -49,9 +51,9 @@ export function DimensionamentoScreen() {
       setDailyResult(calculateFromDaily(value));
       setMonthlyResult(null);
     }
-    // Ao calcular, abre a lista com o primeiro módulo comercial pré-selecionado
-    if (!selectedModuleId && allModules[0]) {
-      setSelectedModuleId(allModules[0].id);
+    // Abre a lista comercial e mantém/seleciona uma placa
+    if (allModules[0]) {
+      setSelectedModuleId((current) => current ?? allModules[0].id);
     }
   };
 
@@ -69,10 +71,18 @@ export function DimensionamentoScreen() {
     }
   }, [activeResult, selectedModule, selectedModuleId]);
 
+  const areaMargin = useMemo(() => {
+    const parsed = parseLocaleNumber(areaMarginPercent);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed >= 100) {
+      return DEFAULT_AREA_MARGIN;
+    }
+    return parsed / 100;
+  }, [areaMarginPercent]);
+
   const moduleSizing = useMemo(() => {
     if (!activeResult || !selectedModule || requiredPowerKwp <= 0) return null;
-    return calculateModulesForPower(requiredPowerKwp, selectedModule);
-  }, [activeResult, selectedModule, requiredPowerKwp]);
+    return calculateModulesForPower(requiredPowerKwp, selectedModule, areaMargin);
+  }, [activeResult, selectedModule, requiredPowerKwp, areaMargin]);
 
   const onSelectModule = (module: SolarModule) => {
     setSelectedModuleId(module.id);
@@ -107,17 +117,35 @@ export function DimensionamentoScreen() {
     return [];
   }, [mode, monthlyResult, dailyResult]);
 
-  const moduleRows = useMemo(() => {
+  const highlightItems = useMemo(() => {
+    if (!moduleSizing) return [];
+    const marginPct = Math.round(moduleSizing.areaMargin * 100);
+    return [
+      {
+        label: '1 · Quantidade de placas',
+        value: `${moduleSizing.quantity} placas`,
+        hint: `${moduleSizing.module.powerWp} Wp · potência instalada ${formatNumber(moduleSizing.installedPowerKwp)} kWp`,
+      },
+      {
+        label: '2 · Área necessária para instalar',
+        value: `${formatNumber(moduleSizing.requiredInstallAreaM2)} m²`,
+        hint: `Área bruta ${formatNumber(moduleSizing.grossAreaM2)} m² + margem ${marginPct}%`,
+        accent: true,
+      },
+      {
+        label: '3 · Inversor necessário',
+        value: `${formatNumber(moduleSizing.inverterMinKw)} – ${formatNumber(moduleSizing.inverterMaxKw)} kW`,
+        hint: 'Faixa com FDI 1,15 a 1,30 sobre a potência instalada',
+      },
+    ];
+  }, [moduleSizing]);
+
+  const detailRows = useMemo(() => {
     if (!moduleSizing) return [];
     return [
       {
-        label: 'Módulo escolhido',
-        value: `${moduleSizing.module.powerWp} Wp · ${formatNumber(moduleSizing.module.areaM2)} m²`,
-      },
-      {
-        label: 'Quantidade de placas',
-        value: String(moduleSizing.quantity),
-        emphasize: true,
+        label: 'Placa selecionada',
+        value: `${moduleSizing.module.powerWp} Wp · ${formatNumber(moduleSizing.module.areaM2)} m²/un`,
       },
       {
         label: 'Potência instalada',
@@ -128,7 +156,12 @@ export function DimensionamentoScreen() {
         value: `${formatNumber(moduleSizing.grossAreaM2)} m²`,
       },
       {
-        label: 'Inversor necessário (FDI 1,15–1,30)',
+        label: 'Área necessária (com margem)',
+        value: `${formatNumber(moduleSizing.requiredInstallAreaM2)} m²`,
+        emphasize: true,
+      },
+      {
+        label: 'Inversor (FDI 1,15–1,30)',
         value: `${formatNumber(moduleSizing.inverterMinKw)} – ${formatNumber(moduleSizing.inverterMaxKw)} kW`,
         emphasize: true,
       },
@@ -138,7 +171,7 @@ export function DimensionamentoScreen() {
   return (
     <ScreenContainer
       title="Dimensionamento"
-      subtitle="Informe o consumo, escolha a placa comercial e veja a quantidade e o inversor."
+      subtitle="Consumo → escolha a placa → quantidade, área de instalação e inversor."
     >
       <View style={[styles.segment, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         {(
@@ -199,12 +232,12 @@ export function DimensionamentoScreen() {
 
       {activeResult && consumptionRows.length > 0 ? (
         <>
-          <ResultCard title="Resultados do consumo" rows={consumptionRows} />
+          <ResultCard title="1. Resultado do consumo" rows={consumptionRows} />
 
-          <Text style={[styles.section, { color: colors.text }]}>Escolha a placa comercial</Text>
+          <Text style={[styles.section, { color: colors.text }]}>2. Escolha a placa comercial</Text>
           <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-            Qtd. de placas = ceil(potência necessária ÷ potência da placa). Ao trocar a placa, a
-            quantidade e o inversor são recalculados automaticamente.
+            Selecione a potência da placa. A cada troca, o app recalcula quantidade, área necessária
+            de instalação e inversor.
           </Text>
 
           <ModulePicker
@@ -213,8 +246,23 @@ export function DimensionamentoScreen() {
             onSelect={onSelectModule}
           />
 
-          {moduleSizing && moduleRows.length > 0 ? (
-            <ResultCard title="Placas e inversor" rows={moduleRows} />
+          <InputField
+            label="Margem de área para instalação (%)"
+            value={areaMarginPercent}
+            onChangeText={setAreaMarginPercent}
+            keyboardType="decimal-pad"
+            placeholder="10"
+            hint="Padrão 10%. Área necessária = área bruta das placas × (1 + margem)."
+          />
+
+          {moduleSizing ? (
+            <>
+              <SizingHighlights
+                title="3. Dimensionamento da placa escolhida"
+                items={highlightItems}
+              />
+              <ResultCard title="Detalhes do arranjo" rows={detailRows} />
+            </>
           ) : null}
 
           <AiReviewCard
