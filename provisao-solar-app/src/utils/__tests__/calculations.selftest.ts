@@ -5,6 +5,7 @@
 import {
   calculateFromDaily,
   calculateFromMonthly,
+  calculateModulesForPower,
   calculateRoofDirect,
   calculateRoofInverse,
   computeModuleArea,
@@ -47,5 +48,10 @@ assert(almostEqual(inverse.maxPowerKwp, 7.7), 'Potência máxima');
 assert(almostEqual(inverse.estimatedMonthlyGenerationKwh, 770), 'Geração mensal');
 
 assert(almostEqual(computeModuleArea(2.27, 1.13), 2.57) || almostEqual(computeModuleArea(2.27, 1.13), 2.56), 'Área unitária');
+
+const sizing = calculateModulesForPower(4.5, module550);
+assert(sizing.quantity === 9, `Qtd placas esperada 9, veio ${sizing.quantity}`);
+assert(almostEqual(sizing.installedPowerKwp, 4.95), 'Potência instalada 9x550');
+assert(almostEqual(sizing.inverterMinKw, 4.95 / 1.3), 'Inversor min pela potência instalada');
 
 console.log('✅ Self-test de cálculos OK');

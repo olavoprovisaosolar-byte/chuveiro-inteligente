@@ -1,17 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AiReviewCard } from '../components/AiReviewCard';
 import { HelpCard } from '../components/HelpCard';
 import { InputField } from '../components/InputField';
+import { ModulePicker } from '../components/ModulePicker';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ResultCard } from '../components/ResultCard';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { FACTOR_333_EXPLANATION } from '../constants/modules';
 import { useAiConfig } from '../hooks/useAiConfig';
+import { useModules } from '../hooks/useModules';
 import { useTheme } from '../theme/ThemeContext';
+import { SolarModule } from '../types';
 import {
   calculateFromDaily,
   calculateFromMonthly,
+  calculateModulesForPower,
   formatNumber,
   parseLocaleNumber,
 } from '../utils/calculations';
@@ -21,6 +25,7 @@ type Mode = 'monthly' | 'daily';
 export function DimensionamentoScreen() {
   const { colors } = useTheme();
   const { review, hasApiKey } = useAiConfig();
+  const { allModules } = useModules();
   const [mode, setMode] = useState<Mode>('monthly');
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | undefined>();
@@ -28,6 +33,7 @@ export function DimensionamentoScreen() {
     null,
   );
   const [dailyResult, setDailyResult] = useState<ReturnType<typeof calculateFromDaily> | null>(null);
+  const [selectedModuleId, setSelectedModuleId] = useState<string | undefined>(undefined);
 
   const onCalculate = () => {
     const value = parseLocaleNumber(input);
@@ -43,23 +49,44 @@ export function DimensionamentoScreen() {
       setDailyResult(calculateFromDaily(value));
       setMonthlyResult(null);
     }
+    // Ao calcular, abre a lista com o primeiro módulo comercial pré-selecionado
+    if (!selectedModuleId && allModules[0]) {
+      setSelectedModuleId(allModules[0].id);
+    }
   };
 
   const activeResult = mode === 'monthly' ? monthlyResult : dailyResult;
+  const requiredPowerKwp = activeResult?.powerKwp ?? 0;
 
-  const rows = useMemo(() => {
+  const selectedModule = useMemo(
+    () => allModules.find((m) => m.id === selectedModuleId) ?? allModules[0],
+    [allModules, selectedModuleId],
+  );
+
+  useEffect(() => {
+    if (activeResult && selectedModule && selectedModuleId !== selectedModule.id) {
+      setSelectedModuleId(selectedModule.id);
+    }
+  }, [activeResult, selectedModule, selectedModuleId]);
+
+  const moduleSizing = useMemo(() => {
+    if (!activeResult || !selectedModule || requiredPowerKwp <= 0) return null;
+    return calculateModulesForPower(requiredPowerKwp, selectedModule);
+  }, [activeResult, selectedModule, requiredPowerKwp]);
+
+  const onSelectModule = (module: SolarModule) => {
+    setSelectedModuleId(module.id);
+  };
+
+  const consumptionRows = useMemo(() => {
     if (mode === 'monthly' && monthlyResult) {
       return [
         { label: 'Consumo mensal', value: `${formatNumber(monthlyResult.monthlyKwh)} kWh/mês` },
         { label: 'Média diária', value: `${formatNumber(monthlyResult.dailyKwh)} kWh/dia` },
         {
-          label: 'Potência estimada',
+          label: 'Potência necessária',
           value: `${formatNumber(monthlyResult.powerKwp)} kWp`,
           emphasize: true,
-        },
-        {
-          label: 'Inversor sugerido (FDI 1,15–1,30)',
-          value: `${formatNumber(monthlyResult.inverterMinKw)} – ${formatNumber(monthlyResult.inverterMaxKw)} kW`,
         },
       ];
     }
@@ -71,23 +98,47 @@ export function DimensionamentoScreen() {
           value: `${formatNumber(dailyResult.monthlyKwh)} kWh/mês`,
         },
         {
-          label: 'Potência estimada (÷ 3,33)',
+          label: 'Potência necessária (÷ 3,33)',
           value: `${formatNumber(dailyResult.powerKwp)} kWp`,
           emphasize: true,
-        },
-        {
-          label: 'Inversor sugerido (FDI 1,15–1,30)',
-          value: `${formatNumber(dailyResult.inverterMinKw)} – ${formatNumber(dailyResult.inverterMaxKw)} kW`,
         },
       ];
     }
     return [];
   }, [mode, monthlyResult, dailyResult]);
 
+  const moduleRows = useMemo(() => {
+    if (!moduleSizing) return [];
+    return [
+      {
+        label: 'Módulo escolhido',
+        value: `${moduleSizing.module.powerWp} Wp · ${formatNumber(moduleSizing.module.areaM2)} m²`,
+      },
+      {
+        label: 'Quantidade de placas',
+        value: String(moduleSizing.quantity),
+        emphasize: true,
+      },
+      {
+        label: 'Potência instalada',
+        value: `${formatNumber(moduleSizing.installedPowerKwp)} kWp`,
+      },
+      {
+        label: 'Área bruta das placas',
+        value: `${formatNumber(moduleSizing.grossAreaM2)} m²`,
+      },
+      {
+        label: 'Inversor necessário (FDI 1,15–1,30)',
+        value: `${formatNumber(moduleSizing.inverterMinKw)} – ${formatNumber(moduleSizing.inverterMaxKw)} kW`,
+        emphasize: true,
+      },
+    ];
+  }, [moduleSizing]);
+
   return (
     <ScreenContainer
       title="Dimensionamento"
-      subtitle="Calcule a potência do sistema a partir do consumo mensal ou diário."
+      subtitle="Informe o consumo, escolha a placa comercial e veja a quantidade e o inversor."
     >
       <View style={[styles.segment, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         {(
@@ -146,9 +197,26 @@ export function DimensionamentoScreen() {
 
       <HelpCard title="Por que o fator 3,33?" body={FACTOR_333_EXPLANATION} />
 
-      {activeResult && rows.length > 0 ? (
+      {activeResult && consumptionRows.length > 0 ? (
         <>
-          <ResultCard title="Resultados do dimensionamento" rows={rows} />
+          <ResultCard title="Resultados do consumo" rows={consumptionRows} />
+
+          <Text style={[styles.section, { color: colors.text }]}>Escolha a placa comercial</Text>
+          <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
+            Qtd. de placas = ceil(potência necessária ÷ potência da placa). Ao trocar a placa, a
+            quantidade e o inversor são recalculados automaticamente.
+          </Text>
+
+          <ModulePicker
+            modules={allModules}
+            selectedId={selectedModule?.id}
+            onSelect={onSelectModule}
+          />
+
+          {moduleSizing && moduleRows.length > 0 ? (
+            <ResultCard title="Placas e inversor" rows={moduleRows} />
+          ) : null}
+
           <AiReviewCard
             payload={
               mode === 'monthly' && monthlyResult
@@ -184,4 +252,15 @@ const styles = StyleSheet.create({
     minHeight: 42,
   },
   cta: { marginBottom: 16 },
+  section: {
+    fontFamily: 'Outfit_700Bold',
+    fontSize: 18,
+    marginBottom: 6,
+  },
+  sectionHint: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 12,
+  },
 });

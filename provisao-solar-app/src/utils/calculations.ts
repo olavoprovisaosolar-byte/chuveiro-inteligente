@@ -35,6 +35,37 @@ export function suggestInverterRange(powerKwp: number): {
   };
 }
 
+/**
+ * A partir da potência necessária (kWp) e do módulo escolhido:
+ * Qtd = ceil(kWp * 1000 / Wp da placa) e inversor pela potência instalada.
+ */
+export function calculateModulesForPower(
+  requiredPowerKwp: number,
+  module: SolarModule,
+): {
+  module: SolarModule;
+  requiredPowerKwp: number;
+  quantity: number;
+  installedPowerKwp: number;
+  grossAreaM2: number;
+  inverterMinKw: number;
+  inverterMaxKw: number;
+} {
+  const requiredWp = requiredPowerKwp * 1000;
+  const quantity = Math.max(1, Math.ceil(requiredWp / module.powerWp));
+  const installedPowerKwp = round2((quantity * module.powerWp) / 1000);
+  const grossAreaM2 = round2(quantity * module.areaM2);
+  const inverter = suggestInverterRange(installedPowerKwp);
+  return {
+    module,
+    requiredPowerKwp,
+    quantity,
+    installedPowerKwp,
+    grossAreaM2,
+    ...inverter,
+  };
+}
+
 export function calculateFromMonthly(monthlyKwh: number): ConsumptionMonthlyResult {
   const dailyKwh = round2(monthlyKwh / DAYS_PER_MONTH);
   const powerKwp = round2(monthlyKwh / MONTHLY_TO_KWP_DIVISOR);
