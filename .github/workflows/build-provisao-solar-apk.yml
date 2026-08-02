@@ -42,20 +42,72 @@ jobs:
         run: npm ci
 
       - name: Prebuild native Android project
-        run: npx expo prebuild --platform android --non-interactive
+        env:
+          EXPO_NO_TELEMETRY: '1'
+        run: npx expo prebuild --platform android --non-interactive --clean
+
+      - name: Sign release builds with debug keystore
+        # Internal/test APK: release variant embeds the JS bundle (unlike debug).
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('android/app/build.gradle')
+          text = path.read_text()
+          old = """        release {
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.debug
+            shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
+        }"""
+          if 'signingConfig signingConfigs.debug' in text and 'release {' in text:
+              print('Release already uses debug signingConfig (or equivalent present).')
+          else:
+              # Fallback patch: force release to use debug signing
+              import re
+              patched, n = re.subn(
+                  r'(release\s*\{)(.*?)(\n\s*\})',
+                  lambda m: m.group(1) + '\n            signingConfig signingConfigs.debug' + m.group(2) + m.group(3)
+                  if 'signingConfig' not in m.group(2) else m.group(0),
+                  text,
+                  count=1,
+                  flags=re.S,
+              )
+              if n:
+                  path.write_text(patched)
+                  print('Patched release signingConfig to debug.')
+              else:
+                  print('WARNING: could not patch release signing; dumping release block:')
+                  for i, line in enumerate(text.splitlines(), 1):
+                      if 'release' in line or 'signingConfig' in line or 'buildTypes' in line:
+                          print(f'{i}: {line}')
+          print('--- release-related lines ---')
+          for i, line in enumerate(path.read_text().splitlines(), 1):
+              if any(k in line for k in ('buildTypes', 'release', 'signingConfig', 'minifyEnabled')):
+                  print(f'{i}: {line}')
+          PY
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
-      - name: Build Debug APK
+      - name: Build Release APK (JS bundle embedded)
         working-directory: provisao-solar-app/android
-        run: ./gradlew assembleDebug --no-daemon
+        env:
+          NODE_ENV: production
+          EXPO_NO_TELEMETRY: '1'
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Copy APK artifact
         run: |
           mkdir -p ../artifact
-          cp android/app/build/outputs/apk/debug/app-debug.apk ../artifact/ProvisaoSolar.apk
+          APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
+          echo "Using APK: $APK_PATH"
+          cp "$APK_PATH" ../artifact/ProvisaoSolar.apk
           ls -lh ../artifact/ProvisaoSolar.apk
+          # Sanity: release APK should contain the JS bundle asset
+          unzip -l ../artifact/ProvisaoSolar.apk | rg -i "index\.(android\.)?bundle|\.hbc|expo" | head -40 || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

@@ -45,9 +45,11 @@ Scripts úteis:
 
 Link direto para baixar o APK gerado:
 
-**https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/download/provisao-solar-v1.0.0/ProvisaoSolar.apk**
+**https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/download/provisao-solar-v1.0.1/ProvisaoSolar.apk**
 
-Página do release: https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/tag/provisao-solar-v1.0.0
+Página do release: https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/tag/provisao-solar-v1.0.1
+
+> APK **release** com o bundle JavaScript embutido (não precisa do Metro para abrir).
 
 Página auxiliar local: `provisao-solar-app/download.html`
 
