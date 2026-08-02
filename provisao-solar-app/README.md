@@ -41,6 +41,16 @@ Scripts úteis:
 | `npm run test:calc` | Valida as fórmulas de negócio |
 | `npm run build:apk` | Atalho para build APK (EAS preview) |
 
+## Download do APK (Android)
+
+Link direto para baixar o APK gerado:
+
+**https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/download/provisao-solar-v1.0.0/ProvisaoSolar.apk**
+
+Página do release: https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/tag/provisao-solar-v1.0.0
+
+Página auxiliar local: `provisao-solar-app/download.html`
+
 ## Gerar o arquivo `.apk` (Android)
 
 1. Instale e autentique o EAS CLI:
