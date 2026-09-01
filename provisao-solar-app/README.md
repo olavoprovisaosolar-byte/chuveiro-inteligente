@@ -45,9 +45,9 @@ Scripts úteis:
 
 Link direto para baixar o APK gerado:
 
-**https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/download/solar-calculator-v1.0.17/SolarCalculator.apk**
+**https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/download/solar-calculator-v1.0.18/SolarCalculator.apk**
 
-Página do release: https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/tag/solar-calculator-v1.0.17
+Página do release: https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/releases/tag/solar-calculator-v1.0.18
 
 > App independente **Solar Calculator** (`com.solarcalculator.app`). APK **release** com bundle JavaScript embutido (não precisa do Metro).
 

@@ -16,6 +16,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { enableScreens } from 'react-native-screens';
 import { AppNavigator } from './src/navigation/AppNavigator';
+import { ModulesProvider } from './src/hooks/ModulesContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
 enableScreens(true);
@@ -57,7 +58,9 @@ export default function App() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider>
-          <AppShell />
+          <ModulesProvider>
+            <AppShell />
+          </ModulesProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -16,9 +16,17 @@ import {
 
 export function ModulosScreen() {
   const { colors } = useTheme();
-  const { allModules, customModules, createCustom, removeCustom } = useModules();
+  const {
+    allModules,
+    customModules,
+    createCustom,
+    removeCustom,
+    exportBackup,
+    importBackup,
+  } = useModules();
   const [selectedId, setSelectedId] = useState<string>(allModules[0]?.id ?? '');
   const [quantityText, setQuantityText] = useState('10');
+  const [backupBusy, setBackupBusy] = useState(false);
 
   const [manufacturer, setManufacturer] = useState('');
   const [model, setModel] = useState('');
@@ -79,15 +87,57 @@ export function ModulosScreen() {
     setPowerText('');
     setWidthText('');
     setLengthText('');
-    Alert.alert('Módulo salvo', 'A placa customizada foi salva localmente no dispositivo.');
+    Alert.alert(
+      'Placa salva',
+      'A placa ficou disponível na aba Cálculo, Telhado e Módulos. Faça um backup para não perder em reinstalação.',
+    );
+  };
+
+  const onExportBackup = async () => {
+    setBackupBusy(true);
+    try {
+      await exportBackup();
+      Alert.alert(
+        'Backup pronto',
+        'Escolha Pasta Download, Drive ou outro local para guardar o arquivo JSON das placas cadastradas.',
+      );
+    } catch (error) {
+      Alert.alert(
+        'Falha no backup',
+        error instanceof Error ? error.message : 'Não foi possível exportar o backup.',
+      );
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const onImportBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const result = await importBackup();
+      Alert.alert(
+        'Backup restaurado',
+        `${result.count} placa(s) customizada(s) disponíveis em Cálculo, Telhado e Módulos.`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível importar.';
+      if (message !== 'Importação cancelada.') {
+        Alert.alert('Falha na restauração', message);
+      }
+    } finally {
+      setBackupBusy(false);
+    }
   };
 
   return (
     <ScreenContainer
       title="Módulos & Inversor"
-      subtitle="Catálogo comercial, cadastro customizado e sugestão de inversor com FDI."
+      subtitle="Cadastre placas aqui: elas entram no Cálculo e no Telhado automaticamente."
     >
       <Text style={[styles.section, { color: colors.text }]}>Catálogo de módulos</Text>
+      <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
+        Customizadas aparecem primeiro. Toque para selecionar · segure para remover customizadas.
+      </Text>
       <View style={styles.list}>
         {allModules.map((module) => {
           const selectedModule = module.id === selected?.id;
@@ -210,6 +260,28 @@ export function ModulosScreen() {
         error={formError}
       />
       <PrimaryButton label="Salvar módulo localmente" onPress={onSaveCustom} style={styles.cta} />
+
+      <Text style={[styles.section, { color: colors.text }]}>Backup das placas cadastradas</Text>
+      <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
+        Atualizar o app mantém as placas. Em reinstalação, restaure pelo arquivo JSON de backup
+        (Download/Drive). Também há cópia automática interna.
+      </Text>
+      <Text style={[styles.backupCount, { color: colors.text }]}>
+        Customizadas salvas: {customModules.length}
+      </Text>
+      <PrimaryButton
+        label="Exportar backup (JSON)"
+        onPress={onExportBackup}
+        loading={backupBusy}
+        style={styles.cta}
+      />
+      <PrimaryButton
+        label="Restaurar backup"
+        onPress={onImportBackup}
+        loading={backupBusy}
+        variant="secondary"
+        style={styles.cta}
+      />
       {customModules.length > 0 ? (
         <Text style={[styles.hint, { color: colors.textMuted }]}>
           Toque e segure um módulo customizado para removê-lo.
@@ -223,8 +295,14 @@ const styles = StyleSheet.create({
   section: {
     fontFamily: 'Outfit_700Bold',
     fontSize: 18,
-    marginBottom: 12,
+    marginBottom: 8,
     marginTop: 4,
+  },
+  sectionHint: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 12,
   },
   list: { gap: 10, marginBottom: 16 },
   moduleCard: {
@@ -253,6 +331,11 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   cta: { marginBottom: 10 },
+  backupCount: {
+    fontFamily: 'Outfit_600SemiBold',
+    fontSize: 14,
+    marginBottom: 10,
+  },
   hint: {
     fontFamily: 'DMSans_400Regular',
     fontSize: 12,

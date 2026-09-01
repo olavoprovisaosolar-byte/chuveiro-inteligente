@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { AiReviewCard } from '../components/AiReviewCard';
 import { HelpCard } from '../components/HelpCard';
 import { InputField } from '../components/InputField';
@@ -22,7 +23,7 @@ type Mode = 'direct' | 'inverse';
 
 export function AreaTelhadoScreen() {
   const { colors } = useTheme();
-  const { allModules } = useModules();
+  const { allModules, refresh } = useModules();
   const { review, hasApiKey } = useAiConfig();
   const [mode, setMode] = useState<Mode>('direct');
   const [selectedId, setSelectedId] = useState(allModules[0]?.id ?? '');
@@ -36,6 +37,12 @@ export function AreaTelhadoScreen() {
   const [inverseResult, setInverseResult] = useState<ReturnType<
     typeof calculateRoofInverse
   > | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
 
   useEffect(() => {
     if (!allModules.find((m) => m.id === selectedId) && allModules[0]) {
@@ -84,7 +91,7 @@ export function AreaTelhadoScreen() {
   return (
     <ScreenContainer
       title="Área de Telhado"
-      subtitle="Cálculo bidirecional: do sistema para o telhado ou do telhado para as placas."
+      subtitle="Use placas comerciais ou as cadastradas em Módulos. Cálculo bidirecional de área."
     >
       <View style={[styles.segment, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         {(

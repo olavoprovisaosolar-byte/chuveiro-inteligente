@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { AiReviewCard } from '../components/AiReviewCard';
 import { HelpCard } from '../components/HelpCard';
 import { InputField } from '../components/InputField';
@@ -26,7 +27,7 @@ type Mode = 'monthly' | 'daily';
 export function DimensionamentoScreen() {
   const { colors } = useTheme();
   const { review, hasApiKey } = useAiConfig();
-  const { allModules } = useModules();
+  const { allModules, refresh } = useModules();
   const [mode, setMode] = useState<Mode>('monthly');
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | undefined>();
@@ -36,6 +37,12 @@ export function DimensionamentoScreen() {
   const [dailyResult, setDailyResult] = useState<ReturnType<typeof calculateFromDaily> | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | undefined>(undefined);
   const [areaMarginPercent, setAreaMarginPercent] = useState(String(DEFAULT_AREA_MARGIN * 100));
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
 
   const onCalculate = () => {
     const value = parseLocaleNumber(input);
@@ -236,8 +243,8 @@ export function DimensionamentoScreen() {
 
           <Text style={[styles.section, { color: colors.text }]}>2. Escolha a placa comercial</Text>
           <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-            Selecione a potência da placa. A cada troca, o app recalcula quantidade, área necessária
-            de instalação e inversor.
+            Inclui placas cadastradas na aba Módulos. Ao trocar a placa, recalcula quantidade, área
+            necessária e inversor.
           </Text>
 
           <ModulePicker
