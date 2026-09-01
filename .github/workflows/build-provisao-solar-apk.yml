@@ -1,0 +1,79 @@
+name: Build Solar Calculator APK
+
+on:
+  push:
+    branches:
+      - cursor/provisao-solar-app-f794
+      - master
+      - main
+    paths:
+      - 'provisao-solar-app/**'
+      - '.github/workflows/build-provisao-solar-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: provisao-solar-app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: provisao-solar-app/package-lock.json
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prebuild native Android project
+        env:
+          EXPO_NO_TELEMETRY: '1'
+        run: npx expo prebuild --platform android --non-interactive --clean
+
+      - name: Sign release builds with debug keystore
+        run: python3 scripts/patch-android-release-signing.py android/app/build.gradle
+
+      - name: Unlock orientation for tablets (TL10)
+        run: python3 scripts/patch-android-orientation.py android/app/src/main/AndroidManifest.xml
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Release APK (JS bundle embedded)
+        working-directory: provisao-solar-app/android
+        env:
+          NODE_ENV: production
+          EXPO_NO_TELEMETRY: '1'
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Copy APK artifact
+        run: |
+          mkdir -p ../artifact
+          APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
+          echo "Using APK: $APK_PATH"
+          cp "$APK_PATH" ../artifact/SolarCalculator.apk
+          ls -lh ../artifact/SolarCalculator.apk
+          unzip -l ../artifact/SolarCalculator.apk | grep -Ei 'index\.(android\.)?bundle|\.hbc|assets/.*js' | head -40 || true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: solar-calculator-apk
+          path: artifact/SolarCalculator.apk
+          retention-days: 30

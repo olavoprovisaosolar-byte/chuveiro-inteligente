@@ -11,3 +11,4 @@ android-sdk/
 # OS
 .DS_Store
 Thumbs.db
+downloads/*.apk
