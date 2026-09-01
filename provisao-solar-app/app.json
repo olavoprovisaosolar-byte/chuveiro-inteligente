@@ -2,8 +2,8 @@
   "expo": {
     "name": "Solar Calculator",
     "slug": "solar-calculator",
-    "version": "1.0.16",
-    "orientation": "portrait",
+    "version": "1.0.17",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "solarcalculator",
@@ -15,11 +15,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.solarcalculator.app"
+      "bundleIdentifier": "com.solarcalculator.app",
+      "requireFullScreen": false
     },
     "android": {
       "package": "com.solarcalculator.app",
-      "versionCode": 16,
+      "versionCode": 17,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#0B3D2E",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -35,7 +37,14 @@
     "plugins": [
       "expo-secure-store",
       "expo-font",
-      "expo-splash-screen"
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B3D2E",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ]
     ],
     "extra": {
       "eas": {
