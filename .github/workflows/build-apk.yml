@@ -26,9 +26,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Sync web assets
-        run: |
-          mkdir -p android/app/src/main/assets
-          cp www/index.html www/style.css www/app.js www/mqtt.min.js android/app/src/main/assets/
+        run: bash scripts/sync-assets.sh
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
@@ -53,13 +51,14 @@ jobs:
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
+          tag_name: chuveiro-v1.0.${{ github.run_number }}
           name: Chuveiro Inteligente v1.0.${{ github.run_number }}
           body: |
             ## Downloads
 
             - **APK Android:** `ChuveiroInteligente.apk`
-            - **App web:** abra `index.html` ou a [página de download](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/download.html)
+            - **Link raw:** https://github.com/${{ github.repository }}/raw/${{ github.ref_name }}/downloads/ChuveiroInteligente.apk
+            - **App web:** [download.html](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/download.html)
 
             Instalação: no Android, permita instalar apps de fontes desconhecidas para o navegador/arquivos.
           files: downloads/ChuveiroInteligente.apk
