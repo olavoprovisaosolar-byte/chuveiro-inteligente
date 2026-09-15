@@ -1,0 +1,22 @@
+# Site estático do Chuveiro Inteligente (sem build)
+[build]
+  publish = "."
+  command = "echo Static site"
+
+# Servir APK com tipo MIME correto para download no Android
+[[headers]]
+  for = "/downloads/*.apk"
+  [headers.values]
+    Content-Type = "application/vnd.android.package-archive"
+    Content-Disposition = 'attachment; filename="ChuveiroInteligente.apk"'
+    Cache-Control = "public, max-age=3600"
+
+[[redirects]]
+  from = "/apk"
+  to = "/downloads/ChuveiroInteligente.apk"
+  status = 302
+
+[[redirects]]
+  from = "/baixar"
+  to = "/download.html"
+  status = 302
