@@ -54,6 +54,49 @@ export interface RoofInverseResult {
   estimatedMonthlyGenerationKwh: number;
 }
 
+/** Orientação física da placa no telhado. */
+export type PanelOrientation = 'portrait' | 'landscape';
+
+/**
+ * Posição de uma placa no plano do telhado (metros, origem = canto útil).
+ * Preparado para interação futura (drag / rotate).
+ */
+export interface PanelPlacement {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  orientation: PanelOrientation;
+  /** Ângulo em graus (0 ou 90). Base para rotação horária/anti-horária futura. */
+  rotationDeg: number;
+  selectable?: boolean;
+}
+
+export type RoofLayoutStrategy = 'uniform_portrait' | 'uniform_landscape' | 'mixed' | 'max';
+
+export interface RoofLayoutOption {
+  id: string;
+  label: string;
+  strategy: RoofLayoutStrategy;
+  panelCount: number;
+  orientationSummary: string;
+  usableWidthM: number;
+  usableLengthM: number;
+  edgeMarginM: number;
+  panelGapM: number;
+  roofWidthM: number;
+  roofLengthM: number;
+  placements: PanelPlacement[];
+  totalPowerKwp: number;
+  estimatedMonthlyGenerationKwh: number;
+}
+
+export interface RoofLayoutComputation {
+  options: RoofLayoutOption[];
+  bestOptionId: string;
+}
+
 export interface AiReviewResult {
   coherent: boolean;
   summary: string;

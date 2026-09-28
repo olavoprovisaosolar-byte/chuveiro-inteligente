@@ -110,6 +110,12 @@ export const INVERTER_FDI_MAX = 1.3;
 /** Margem padrão de segurança / desconto de área (10%). */
 export const DEFAULT_AREA_MARGIN = 0.1;
 
+/** Folga de borda do telhado para manutenção/arranjo (metros). */
+export const DEFAULT_EDGE_MARGIN_M = 0.5;
+
+/** Espaçamento mínimo entre placas no arranjo (metros). */
+export const DEFAULT_PANEL_GAP_M = 0.02;
+
 /** Geração estimada: 100 kWh/mês por kWp. */
 export const KWH_PER_KWP_MONTH = 100;
 
