@@ -77,5 +77,13 @@ assert(
   layouts.options[0].placements.length === layouts.options[0].panelCount,
   'Placements sync',
 );
+assert(
+  layouts.options[0].orientationSummary.includes('Vertical') ||
+    layouts.options[0].orientationSummary.includes('Horizontal'),
+  'Resumo de orientação Vertical/Horizontal',
+);
 
 console.log('✅ Self-test de cálculos OK');
+console.log(
+  `   Layout 8×12 m / 550 Wp: máx ${layouts.options[0].panelCount} placas (${layouts.options[0].orientationSummary})`,
+);

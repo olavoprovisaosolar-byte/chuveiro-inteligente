@@ -240,22 +240,23 @@ export function ModulosScreen() {
         placeholder="Ex: 550"
       />
       <InputField
-        label="Largura (m)"
+        label="Largura da Placa (m)"
         value={widthText}
         onChangeText={setWidthText}
         keyboardType="decimal-pad"
-        placeholder="Ex: 1.13"
+        placeholder="Ex: 1,13"
+        hint="Em metros (ex.: 1130 mm = 1,13 m)."
       />
       <InputField
-        label="Comprimento (m)"
+        label="Comprimento da Placa (m)"
         value={lengthText}
         onChangeText={setLengthText}
         keyboardType="decimal-pad"
-        placeholder="Ex: 2.27"
+        placeholder="Ex: 2,27"
         hint={
           autoArea
-            ? `Área unitária automática: ${formatNumber(autoArea)} m²`
-            : 'Área (m²) = Comprimento × Largura'
+            ? `Área unitária automática: ${formatNumber(autoArea)} m² · ${formatNumber(autoArea * 1e6, 0)} mm²`
+            : 'Em metros (ex.: 2270 mm = 2,27 m). Área = Comprimento × Largura.'
         }
         error={formError}
       />

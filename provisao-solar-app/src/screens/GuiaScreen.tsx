@@ -40,6 +40,11 @@ const TERMS = [
     definition:
       'Área do telhado após descontar margem de segurança (obstáculos, bordas, manutenção). Padrão: 10%.',
   },
+  {
+    term: 'Layout 2D / Arranjo',
+    definition:
+      'Sub-aba do Telhado que combina dimensões do espaço com comprimento e largura da placa, testando Vertical, Horizontal e Misto para maximizar a quantidade de módulos.',
+  },
 ];
 
 const FORMULAS = [
@@ -62,6 +67,10 @@ const FORMULAS = [
   {
     title: 'Área — telhado para placas',
     body: 'Área Útil = Área Telhado × (1 − margem)\nQtd Máx. = piso(Área Útil / Área Unitária)\nPotência Máx. (kWp) = (Qtd × Wp) / 1000\nGeração Mensal ≈ Potência Máx. × 100 kWh/mês',
+  },
+  {
+    title: 'Layout 2D — distribuição espacial',
+    body: 'Área útil = (Largura − 2×folga) × (Comprimento − 2×folga)\nTesta Vertical, Horizontal e Misto\nEscolhe o arranjo com a maior quantidade de placas\nPlaca: Comprimento × Largura (m ou mm no cadastro)',
   },
 ];
 

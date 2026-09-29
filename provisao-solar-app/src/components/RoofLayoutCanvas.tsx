@@ -170,7 +170,7 @@ export function RoofLayoutCanvas({
         <View style={styles.legendItem}>
           <View style={[styles.swatch, { backgroundColor: colors.primary }]} />
           <Text style={{ color: colors.textSecondary, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
-            Retrato
+            Vertical
           </Text>
         </View>
         <View style={styles.legendItem}>
@@ -184,7 +184,7 @@ export function RoofLayoutCanvas({
             ]}
           />
           <Text style={{ color: colors.textSecondary, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
-            Paisagem
+            Horizontal
           </Text>
         </View>
         <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 11 }}>

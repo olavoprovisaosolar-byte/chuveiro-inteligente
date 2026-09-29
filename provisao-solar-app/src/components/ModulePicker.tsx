@@ -8,17 +8,34 @@ type Props = {
   modules: SolarModule[];
   selectedId?: string;
   onSelect: (module: SolarModule) => void;
+  /** Exibe comprimento × largura da placa no chip. */
+  showDimensions?: boolean;
 };
 
-export function ModulePicker({ modules, selectedId, onSelect }: Props) {
+export function ModulePicker({
+  modules,
+  selectedId,
+  onSelect,
+  showDimensions = true,
+}: Props) {
   const { colors } = useTheme();
 
   return (
     <View style={styles.wrap}>
-      <Text style={[styles.label, { color: colors.text }]}>Placas comerciais disponíveis</Text>
+      <Text style={[styles.label, { color: colors.text }]}>Modelo de placa / painel</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {modules.map((module) => {
           const selected = module.id === selectedId;
+          const fg = selected
+            ? colors.mode === 'light'
+              ? '#fff'
+              : colors.background
+            : colors.text;
+          const meta = selected
+            ? colors.mode === 'light'
+              ? 'rgba(255,255,255,0.85)'
+              : colors.backgroundAlt
+            : colors.textSecondary;
           return (
             <Pressable
               key={module.id}
@@ -31,26 +48,13 @@ export function ModulePicker({ modules, selectedId, onSelect }: Props) {
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.chipTitle,
-                  { color: selected ? (colors.mode === 'light' ? '#fff' : colors.background) : colors.text },
-                ]}
-              >
-                {module.powerWp} Wp
-              </Text>
-              <Text
-                style={[
-                  styles.chipMeta,
-                  {
-                    color: selected
-                      ? colors.mode === 'light'
-                        ? 'rgba(255,255,255,0.85)'
-                        : colors.backgroundAlt
-                      : colors.textSecondary,
-                  },
-                ]}
-              >
+              <Text style={[styles.chipTitle, { color: fg }]}>{module.powerWp} Wp</Text>
+              {showDimensions ? (
+                <Text style={[styles.chipMeta, { color: meta }]}>
+                  {formatNumber(module.lengthM)} × {formatNumber(module.widthM)} m
+                </Text>
+              ) : null}
+              <Text style={[styles.chipMeta, { color: meta }]}>
                 {formatNumber(module.areaM2)} m²
                 {module.isCustom ? ' · custom' : ''}
               </Text>
@@ -75,7 +79,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    minWidth: 110,
+    minWidth: 120,
   },
   chipTitle: {
     fontFamily: 'Outfit_700Bold',

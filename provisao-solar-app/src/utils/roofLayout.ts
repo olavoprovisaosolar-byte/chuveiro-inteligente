@@ -201,11 +201,27 @@ function summarizeOrientations(placements: PanelPlacement[]): string {
   const portrait = placements.filter((p) => p.orientation === 'portrait').length;
   const landscape = placements.filter((p) => p.orientation === 'landscape').length;
   if (portrait > 0 && landscape > 0) {
-    return `${portrait} retrato + ${landscape} paisagem`;
+    return `${portrait} na Vertical + ${landscape} na Horizontal`;
   }
-  if (landscape > 0) return 'Todas em paisagem';
-  if (portrait > 0) return 'Todas em retrato';
+  if (landscape > 0) {
+    return landscape === 1
+      ? '1 placa na Horizontal'
+      : `Todas as ${landscape} placas na Horizontal`;
+  }
+  if (portrait > 0) {
+    return portrait === 1
+      ? '1 placa na Vertical'
+      : `Todas as ${portrait} placas na Vertical`;
+  }
   return 'Sem placas';
+}
+
+/** Texto de destaque do arranjo otimizado (ex.: "Arranjo Otimizado: 12 na Vertical + 4 na Horizontal"). */
+export function formatOptimizedArrangement(option: RoofLayoutOption | null): string {
+  if (!option || option.panelCount <= 0) {
+    return 'Arranjo Otimizado: nenhuma placa encaixou com as dimensões atuais';
+  }
+  return `Arranjo Otimizado: ${option.panelCount} placas · ${option.orientationSummary}`;
 }
 
 function toOption(params: {
