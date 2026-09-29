@@ -7,6 +7,7 @@ on:
       - cursor/telhado-arranjo-layout-f794
       - cursor/apk-signing-estavel-f794
       - cursor/telhado-poligonal-obstaculos-f794
+      - cursor/obstaculos-interativos-f794
       - master
       - main
     paths:

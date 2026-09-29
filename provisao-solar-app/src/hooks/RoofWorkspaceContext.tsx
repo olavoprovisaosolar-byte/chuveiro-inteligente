@@ -27,6 +27,7 @@ import { parseLocaleNumber } from '../utils/calculations';
 import {
   OBSTACLE_KIND_LABELS,
   boundingBox,
+  clampObstacleToRoof,
   normalizePolygonOrigin,
   polygonArea,
   scalePolygonToEdge,
@@ -79,6 +80,9 @@ type RoofWorkspaceValue = {
   clearDraftPolygon: () => void;
   closePolygon: () => void;
   obstacles: RoofObstacle[];
+  selectedObstacleId: string | null;
+  setSelectedObstacleId: (id: string | null) => void;
+  selectedObstacle: RoofObstacle | null;
   addObstacle: (input: {
     kind: ObstacleKind;
     shape: ObstacleShape;
@@ -88,8 +92,12 @@ type RoofWorkspaceValue = {
     x?: number;
     y?: number;
   }) => void;
+  updateObstacle: (id: string, patch: Partial<RoofObstacle>) => void;
+  moveObstacle: (id: string, x: number, y: number) => void;
+  rotateObstacle: (id: string, deltaDeg: number) => void;
   removeObstacle: (id: string) => void;
   clearObstacles: () => void;
+  roofBounds: { width: number; height: number };
   hasRoofGeometry: boolean;
   hasRoofDimensions: boolean;
   roofWidth: number;
@@ -136,6 +144,7 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
   const [edgeLengthTexts, setEdgeLengthTexts] = useState<string[]>([]);
   const [calibrateEdgeIndex, setCalibrateEdgeIndex] = useState(0);
   const [obstacles, setObstacles] = useState<RoofObstacle[]>([]);
+  const [selectedObstacleId, setSelectedObstacleId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!allModules.find((m) => m.id === selectedId) && allModules[0]) {
@@ -338,6 +347,18 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
     });
   }, []);
 
+  const roofBounds = useMemo(() => {
+    if (shapeMode === 'polygon' && polygonMeters) {
+      const box = boundingBox(polygonMeters);
+      return { width: box.width, height: box.height };
+    }
+    if (hasRoofDimensions) return { width: roofWidth, height: roofLength };
+    return { width: 8, height: 10 };
+  }, [shapeMode, polygonMeters, hasRoofDimensions, roofWidth, roofLength]);
+
+  const selectedObstacle =
+    obstacles.find((o) => o.id === selectedObstacleId) ?? null;
+
   const addObstacle = useCallback(
     (input: {
       kind: ObstacleKind;
@@ -353,14 +374,19 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
         Number.isFinite(clearance) && clearance >= 0
           ? clearance
           : DEFAULT_OBSTACLE_CLEARANCE_M;
-      const box = polygonMeters
-        ? boundingBox(polygonMeters)
-        : hasRoofDimensions
-          ? { minX: 0, minY: 0, width: roofWidth, height: roofLength }
-          : { minX: 0, minY: 0, width: 8, height: 10 };
       const id = `obs-${obstacleSeq++}`;
-      const cx = input.x ?? box.width / 2 - input.widthM / 2;
-      const cy = input.y ?? box.height / 2 - input.heightM / 2;
+      const placed = clampObstacleToRoof(
+        {
+          shape: input.shape,
+          x: input.x ?? roofBounds.width * 0.35,
+          y: input.y ?? roofBounds.height * 0.35,
+          widthM: input.widthM,
+          heightM: input.heightM,
+          radiusM: input.radiusM ?? Math.min(input.widthM, input.heightM) / 2,
+        },
+        roofBounds.width,
+        roofBounds.height,
+      );
       setObstacles((prev) => [
         ...prev,
         {
@@ -368,23 +394,70 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
           kind: input.kind,
           label: OBSTACLE_KIND_LABELS[input.kind] ?? 'Obstáculo',
           shape: input.shape,
-          x: input.shape === 'circle' ? cx + input.widthM / 2 : Math.max(0, cx),
-          y: input.shape === 'circle' ? cy + input.heightM / 2 : Math.max(0, cy),
-          widthM: input.widthM,
-          heightM: input.heightM,
-          radiusM: input.radiusM ?? Math.min(input.widthM, input.heightM) / 2,
+          x: placed.x,
+          y: placed.y,
+          widthM: placed.widthM,
+          heightM: placed.heightM,
+          radiusM: placed.radiusM,
           clearanceM,
+          rotationDeg: 0,
         },
       ]);
+      setSelectedObstacleId(id);
     },
-    [obstacleClearanceText, polygonMeters, hasRoofDimensions, roofWidth, roofLength],
+    [obstacleClearanceText, roofBounds],
+  );
+
+  const updateObstacle = useCallback(
+    (id: string, patch: Partial<RoofObstacle>) => {
+      setObstacles((prev) =>
+        prev.map((o) => {
+          if (o.id !== id) return o;
+          const merged = { ...o, ...patch };
+          const clamped = clampObstacleToRoof(merged, roofBounds.width, roofBounds.height);
+          return {
+            ...merged,
+            x: clamped.x,
+            y: clamped.y,
+            widthM: clamped.widthM,
+            heightM: clamped.heightM,
+            radiusM: clamped.radiusM ?? merged.radiusM,
+          };
+        }),
+      );
+    },
+    [roofBounds],
+  );
+
+  const moveObstacle = useCallback(
+    (id: string, x: number, y: number) => {
+      updateObstacle(id, { x, y });
+    },
+    [updateObstacle],
+  );
+
+  const rotateObstacle = useCallback(
+    (id: string, deltaDeg: number) => {
+      setObstacles((prev) =>
+        prev.map((o) => {
+          if (o.id !== id) return o;
+          const next = ((o.rotationDeg ?? 0) + deltaDeg) % 360;
+          return { ...o, rotationDeg: next < 0 ? next + 360 : next };
+        }),
+      );
+    },
+    [],
   );
 
   const removeObstacle = useCallback((id: string) => {
     setObstacles((prev) => prev.filter((o) => o.id !== id));
+    setSelectedObstacleId((cur) => (cur === id ? null : cur));
   }, []);
 
-  const clearObstacles = useCallback(() => setObstacles([]), []);
+  const clearObstacles = useCallback(() => {
+    setObstacles([]);
+    setSelectedObstacleId(null);
+  }, []);
 
   const value = useMemo<RoofWorkspaceValue>(
     () => ({
@@ -430,9 +503,16 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
       clearDraftPolygon,
       closePolygon,
       obstacles,
+      selectedObstacleId,
+      setSelectedObstacleId,
+      selectedObstacle,
       addObstacle,
+      updateObstacle,
+      moveObstacle,
+      rotateObstacle,
       removeObstacle,
       clearObstacles,
+      roofBounds,
       hasRoofGeometry,
       hasRoofDimensions,
       roofWidth,
@@ -477,9 +557,15 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
       clearDraftPolygon,
       closePolygon,
       obstacles,
+      selectedObstacleId,
+      selectedObstacle,
       addObstacle,
+      updateObstacle,
+      moveObstacle,
+      rotateObstacle,
       removeObstacle,
       clearObstacles,
+      roofBounds,
       hasRoofGeometry,
       hasRoofDimensions,
       roofWidth,

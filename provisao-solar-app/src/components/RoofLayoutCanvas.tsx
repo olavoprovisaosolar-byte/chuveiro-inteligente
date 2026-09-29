@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   LayoutChangeEvent,
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -13,10 +14,14 @@ import { boundingBox, dist } from '../utils/roofGeometry';
 
 type Props = {
   option: RoofLayoutOption | null;
-  /** Vértices em metros; se omitido, usa option.polygon ou retângulo. */
   polygon?: Point2D[];
   obstacles?: RoofObstacle[];
+  selectedObstacleId?: string | null;
+  onSelectObstacle?: (id: string | null) => void;
+  onMoveObstacle?: (id: string, x: number, y: number) => void;
+  onResizeObstacle?: (id: string, widthM: number, heightM: number) => void;
   onPanelPress?: (id: string) => void;
+  /** Habilita drag/seleção/resize de obstáculos. */
   interactive?: boolean;
 };
 
@@ -53,14 +58,238 @@ function EdgeLine({
   );
 }
 
+type DragMode = 'move' | 'resize-se' | 'resize-sw' | 'resize-ne' | 'resize-nw';
+
+function InteractiveObstacle({
+  obstacle,
+  scale,
+  boxMinX,
+  boxMinY,
+  selected,
+  interactive,
+  onSelect,
+  onMove,
+  onResize,
+}: {
+  obstacle: RoofObstacle;
+  scale: number;
+  boxMinX: number;
+  boxMinY: number;
+  selected: boolean;
+  interactive: boolean;
+  onSelect: (id: string) => void;
+  onMove: (id: string, x: number, y: number) => void;
+  onResize: (id: string, w: number, h: number) => void;
+}) {
+  const obstacleRef = useRef(obstacle);
+  obstacleRef.current = obstacle;
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+  const startRef = useRef({
+    x: 0,
+    y: 0,
+    w: 0,
+    h: 0,
+    mode: 'move' as DragMode,
+  });
+
+  const handlersRef = useRef({ onSelect, onMove, onResize });
+  handlersRef.current = { onSelect, onMove, onResize };
+
+  const makePan = useMemo(() => {
+    const create = (mode: DragMode) =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => interactive,
+        onMoveShouldSetPanResponder: (_e, g) =>
+          interactive && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          const o = obstacleRef.current;
+          handlersRef.current.onSelect(o.id);
+          startRef.current = {
+            x: o.x,
+            y: o.y,
+            w: o.widthM,
+            h: o.heightM,
+            mode,
+          };
+        },
+        onPanResponderMove: (_, gesture) => {
+          const o = obstacleRef.current;
+          const s = scaleRef.current;
+          const dx = gesture.dx / s;
+          const dy = gesture.dy / s;
+          const { x, y, w, h, mode: m } = startRef.current;
+          if (m === 'move') {
+            handlersRef.current.onMove(o.id, x + dx, y + dy);
+            return;
+          }
+          if (o.shape === 'circle') {
+            const r0 = o.radiusM ?? Math.min(w, h) / 2;
+            const delta = Math.max(dx, dy);
+            const r = Math.max(0.15, r0 + delta / 2);
+            handlersRef.current.onResize(o.id, r * 2, r * 2);
+            return;
+          }
+          let nx = x;
+          let ny = y;
+          let nw = w;
+          let nh = h;
+          if (m === 'resize-se') {
+            nw = Math.max(0.2, w + dx);
+            nh = Math.max(0.2, h + dy);
+          } else if (m === 'resize-sw') {
+            nw = Math.max(0.2, w - dx);
+            nh = Math.max(0.2, h + dy);
+            nx = x + (w - nw);
+          } else if (m === 'resize-ne') {
+            nw = Math.max(0.2, w + dx);
+            nh = Math.max(0.2, h - dy);
+            ny = y + (h - nh);
+          } else if (m === 'resize-nw') {
+            nw = Math.max(0.2, w - dx);
+            nh = Math.max(0.2, h - dy);
+            nx = x + (w - nw);
+            ny = y + (h - nh);
+          }
+          handlersRef.current.onMove(o.id, nx, ny);
+          handlersRef.current.onResize(o.id, nw, nh);
+        },
+      });
+    return {
+      move: create('move'),
+      se: create('resize-se'),
+      sw: create('resize-sw'),
+      ne: create('resize-ne'),
+      nw: create('resize-nw'),
+    };
+  }, [interactive, obstacle.id]);
+
+  const clear = obstacle.clearanceM || 0;
+  const rot = obstacle.rotationDeg ?? 0;
+  const border = selected ? '#FFD166' : '#B02828';
+  const bg = selected ? 'rgba(200,60,40,0.55)' : 'rgba(180,40,40,0.4)';
+
+  if (obstacle.shape === 'circle') {
+    const r =
+      ((obstacle.radiusM ?? Math.min(obstacle.widthM, obstacle.heightM) / 2) + clear) * scale;
+    const cx = (obstacle.x - boxMinX) * scale;
+    const cy = (obstacle.y - boxMinY) * scale;
+    return (
+      <View
+        {...(interactive ? makePan.move.panHandlers : {})}
+        style={{
+          position: 'absolute',
+          left: cx - r,
+          top: cy - r,
+          width: r * 2,
+          height: r * 2,
+          borderRadius: r,
+          backgroundColor: bg,
+          borderWidth: selected ? 2 : 1,
+          borderColor: border,
+          zIndex: selected ? 20 : 10,
+        }}
+      >
+        {selected && interactive ? (
+          <View {...makePan.se.panHandlers} style={[styles.handle, { right: -6, bottom: -6 }]} />
+        ) : null}
+      </View>
+    );
+  }
+
+  const left = (obstacle.x - boxMinX) * scale;
+  const top = (obstacle.y - boxMinY) * scale;
+  const width = obstacle.widthM * scale;
+  const height = obstacle.heightM * scale;
+  const clearPx = clear * scale;
+
+  return (
+    <View
+      {...(interactive ? makePan.move.panHandlers : {})}
+      style={{
+        position: 'absolute',
+        left: left - clearPx,
+        top: top - clearPx,
+        width: width + clearPx * 2,
+        height: height + clearPx * 2,
+        zIndex: selected ? 20 : 10,
+      }}
+    >
+      <View
+        pointerEvents="none"
+        style={{
+          ...StyleSheet.absoluteFill,
+          backgroundColor: 'rgba(180,40,40,0.15)',
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: 'rgba(176,40,40,0.5)',
+          borderStyle: 'dashed',
+        }}
+      />
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: clearPx,
+          top: clearPx,
+          width,
+          height,
+          backgroundColor: bg,
+          borderWidth: selected ? 2 : 1,
+          borderColor: border,
+          borderRadius: 3,
+          transform: [{ rotate: `${rot}deg` }],
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Text
+          numberOfLines={1}
+          style={{
+            color: '#fff',
+            fontFamily: 'DMSans_500Medium',
+            fontSize: Math.max(9, Math.min(12, width / 6)),
+            paddingHorizontal: 2,
+          }}
+        >
+          {obstacle.label}
+        </Text>
+      </View>
+      {selected && interactive ? (
+        <>
+          <View
+            {...makePan.nw.panHandlers}
+            style={[styles.handle, { left: clearPx - 6, top: clearPx - 6 }]}
+          />
+          <View
+            {...makePan.ne.panHandlers}
+            style={[styles.handle, { left: clearPx + width - 6, top: clearPx - 6 }]}
+          />
+          <View
+            {...makePan.sw.panHandlers}
+            style={[styles.handle, { left: clearPx - 6, top: clearPx + height - 6 }]}
+          />
+          <View
+            {...makePan.se.panHandlers}
+            style={[styles.handle, { left: clearPx + width - 6, top: clearPx + height - 6 }]}
+          />
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 /**
- * Visualização do arranjo: polígono, obstáculos e placas.
- * Coordenadas em metros a partir da origem do bounding box (0,0).
+ * Visualização / editor do arranjo: polígono, obstáculos interativos e placas.
  */
 export function RoofLayoutCanvas({
   option,
   polygon: polygonProp,
   obstacles: obstaclesProp,
+  selectedObstacleId = null,
+  onSelectObstacle,
+  onMoveObstacle,
+  onResizeObstacle,
   onPanelPress,
   interactive = false,
 }: Props) {
@@ -105,7 +334,7 @@ export function RoofLayoutCanvas({
     const aspect = box.height / box.width;
     let drawW = available;
     let drawH = drawW * aspect;
-    const maxH = 320;
+    const maxH = 360;
     if (drawH > maxH) {
       drawH = maxH;
       drawW = drawH / aspect;
@@ -142,7 +371,7 @@ export function RoofLayoutCanvas({
           <View style={styles.metaRow}>
             <Text style={[styles.metaTitle, { color: colors.text }]}>{option.label}</Text>
             <Text style={[styles.metaCount, { color: colors.accent }]}>
-              {option.panelCount} placas
+              {option.panelCount} placas · {formatNumber(option.totalPowerKwp)} kWp
             </Text>
           </View>
           <Text style={[styles.metaSub, { color: colors.textSecondary }]}>
@@ -157,8 +386,15 @@ export function RoofLayoutCanvas({
         </>
       ) : null}
 
+      {interactive ? (
+        <Text style={[styles.hint, { color: colors.textMuted }]}>
+          Arraste obstáculos no telhado · toque para selecionar · alças nos cantos redimensionam
+        </Text>
+      ) : null}
+
       <View style={[styles.stage, { padding }]}>
-        <View
+        <Pressable
+          onPress={() => onSelectObstacle?.(null)}
           style={[
             styles.roof,
             {
@@ -170,7 +406,6 @@ export function RoofLayoutCanvas({
           ]}
           testID="roof-layout-canvas"
         >
-          {/* Contorno do polígono */}
           {polyDraw.length >= 2
             ? polyDraw.map((p, i) => (
                 <EdgeLine
@@ -183,7 +418,6 @@ export function RoofLayoutCanvas({
               ))
             : null}
 
-          {/* Vértices */}
           {polyDraw.map((p, i) => (
             <View
               key={`v-${i}`}
@@ -200,50 +434,7 @@ export function RoofLayoutCanvas({
             />
           ))}
 
-          {/* Obstáculos */}
-          {obstacles.map((o) => {
-            const clear = o.clearanceM || 0;
-            if (o.shape === 'circle') {
-              const r = ((o.radiusM ?? Math.min(o.widthM, o.heightM) / 2) + clear) * scale;
-              const cx = (o.x - box.minX) * scale;
-              const cy = (o.y - box.minY) * scale;
-              return (
-                <View
-                  key={o.id}
-                  pointerEvents="none"
-                  style={{
-                    position: 'absolute',
-                    left: cx - r,
-                    top: cy - r,
-                    width: r * 2,
-                    height: r * 2,
-                    borderRadius: r,
-                    backgroundColor: 'rgba(180,40,40,0.45)',
-                    borderWidth: 1,
-                    borderColor: '#B02828',
-                  }}
-                />
-              );
-            }
-            return (
-              <View
-                key={o.id}
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  left: (o.x - clear - box.minX) * scale,
-                  top: (o.y - clear - box.minY) * scale,
-                  width: (o.widthM + 2 * clear) * scale,
-                  height: (o.heightM + 2 * clear) * scale,
-                  backgroundColor: 'rgba(180,40,40,0.4)',
-                  borderWidth: 1,
-                  borderColor: '#B02828',
-                }}
-              />
-            );
-          })}
-
-          {/* Placas */}
+          {/* Placas (abaixo dos obstáculos para facilitar o toque) */}
           {(option?.placements ?? []).map((panel) => {
             const isLandscape = panel.orientation === 'landscape';
             const fill = isLandscape
@@ -256,7 +447,7 @@ export function RoofLayoutCanvas({
             return (
               <Pressable
                 key={panel.id}
-                disabled={!interactive}
+                disabled={!onPanelPress}
                 onPress={() => onPanelPress?.(panel.id)}
                 style={{
                   position: 'absolute',
@@ -268,11 +459,27 @@ export function RoofLayoutCanvas({
                   borderWidth: 1,
                   borderColor: colors.mode === 'light' ? '#F5D78A' : '#E8A317',
                   borderRadius: 2,
+                  zIndex: 1,
                 }}
               />
             );
           })}
-        </View>
+
+          {obstacles.map((o) => (
+            <InteractiveObstacle
+              key={o.id}
+              obstacle={o}
+              scale={scale}
+              boxMinX={box.minX}
+              boxMinY={box.minY}
+              selected={o.id === selectedObstacleId}
+              interactive={interactive}
+              onSelect={(id) => onSelectObstacle?.(id)}
+              onMove={(id, x, y) => onMoveObstacle?.(id, x, y)}
+              onResize={(id, w, h) => onResizeObstacle?.(id, w, h)}
+            />
+          ))}
+        </Pressable>
       </View>
 
       <View style={styles.legend}>
@@ -291,7 +498,7 @@ export function RoofLayoutCanvas({
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.swatch, { backgroundColor: 'rgba(180,40,40,0.7)' }]} />
-          <Text style={styles.legendText}>Obstáculo</Text>
+          <Text style={styles.legendText}>Obstáculo (arrastável)</Text>
         </View>
       </View>
     </View>
@@ -320,7 +527,6 @@ export function RoofPolygonSketch({
   const onTap = (evt: { nativeEvent: { locationX: number; locationY: number } }) => {
     if (closed) return;
     const { locationX, locationY } = evt.nativeEvent;
-    // Coordenadas normalizadas 0–1 no sketch; conversão para metros ocorre na calibração
     onAddVertex({
       x: locationX / size.w,
       y: locationY / size.h,
@@ -471,13 +677,18 @@ const styles = StyleSheet.create({
   },
   metaCount: {
     fontFamily: 'Outfit_700Bold',
-    fontSize: 16,
+    fontSize: 15,
   },
   metaSub: {
     fontFamily: 'DMSans_400Regular',
     fontSize: 13,
     marginTop: 4,
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  hint: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    marginBottom: 10,
   },
   stage: { alignItems: 'center', justifyContent: 'center' },
   roof: {
@@ -485,6 +696,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     position: 'relative',
+  },
+  handle: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#FFD166',
+    borderWidth: 2,
+    borderColor: '#fff',
+    zIndex: 30,
   },
   legend: {
     marginTop: 12,

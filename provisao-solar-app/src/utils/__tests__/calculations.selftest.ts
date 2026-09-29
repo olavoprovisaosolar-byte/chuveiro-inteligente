@@ -123,6 +123,39 @@ assert(
   'Nenhuma placa sobre obstáculo+clearance',
 );
 
+// Obstáculo rotacionado deve continuar bloqueando a área (AABB expandido)
+const rotated = computeRoofLayouts({
+  roofWidthM: 8,
+  roofLengthM: 8,
+  module: module550,
+  edgeMarginM: 0.3,
+  obstacles: [
+    {
+      id: 'rot-1',
+      kind: 'custom',
+      label: 'Bloco',
+      shape: 'rect',
+      x: 3,
+      y: 3,
+      widthM: 2,
+      heightM: 1,
+      clearanceM: 0.3,
+      rotationDeg: 45,
+    },
+  ],
+});
+const plain = computeRoofLayouts({
+  roofWidthM: 8,
+  roofLengthM: 8,
+  module: module550,
+  edgeMarginM: 0.3,
+  obstacles: [],
+});
+assert(
+  rotated.options[0].panelCount < plain.options[0].panelCount,
+  'Obstáculo rotacionado reduz placas vs telhado livre',
+);
+
 console.log('✅ Self-test de cálculos OK');
 console.log(
   `   Layout 8×12 m / 550 Wp: máx ${layouts.options[0].panelCount} placas (${layouts.options[0].orientationSummary})`,

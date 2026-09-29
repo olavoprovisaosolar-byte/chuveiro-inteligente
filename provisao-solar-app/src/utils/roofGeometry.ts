@@ -110,7 +110,43 @@ function circleOverlapsRect(
   return dx * dx + dy * dy < r * r;
 }
 
-/** Obstáculo expandido pela folga de segurança. */
+/** AABB de um retângulo rotacionado em torno do centro (graus). */
+export function rotatedRectAabb(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rotationDeg = 0,
+): { minX: number; minY: number; maxX: number; maxY: number } {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const rad = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const corners = [
+    { x, y },
+    { x: x + w, y },
+    { x: x + w, y: y + h },
+    { x, y: y + h },
+  ].map((p) => {
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+  });
+  let minX = corners[0].x;
+  let minY = corners[0].y;
+  let maxX = corners[0].x;
+  let maxY = corners[0].y;
+  for (const c of corners) {
+    minX = Math.min(minX, c.x);
+    minY = Math.min(minY, c.y);
+    maxX = Math.max(maxX, c.x);
+    maxY = Math.max(maxY, c.y);
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+/** Obstáculo expandido pela folga de segurança (respeita rotação). */
 export function obstacleHitsRect(
   obstacle: RoofObstacle,
   x: number,
@@ -123,16 +159,43 @@ export function obstacleHitsRect(
     const r = (obstacle.radiusM ?? Math.min(obstacle.widthM, obstacle.heightM) / 2) + clear;
     return circleOverlapsRect(obstacle.x, obstacle.y, r, x, y, w, h);
   }
-  return rectsOverlap(
+  const rot = obstacle.rotationDeg ?? 0;
+  const aabb = rotatedRectAabb(
     obstacle.x - clear,
     obstacle.y - clear,
     obstacle.widthM + 2 * clear,
     obstacle.heightM + 2 * clear,
+    rot,
+  );
+  return rectsOverlap(
+    aabb.minX,
+    aabb.minY,
+    aabb.maxX - aabb.minX,
+    aabb.maxY - aabb.minY,
     x,
     y,
     w,
     h,
   );
+}
+
+/** Limita posição/tamanho do obstáculo ao bounding box do telhado. */
+export function clampObstacleToRoof(
+  obstacle: Pick<RoofObstacle, 'shape' | 'x' | 'y' | 'widthM' | 'heightM' | 'radiusM'>,
+  roofW: number,
+  roofH: number,
+): { x: number; y: number; widthM: number; heightM: number; radiusM?: number } {
+  if (obstacle.shape === 'circle') {
+    const r = obstacle.radiusM ?? Math.min(obstacle.widthM, obstacle.heightM) / 2;
+    const cx = Math.min(Math.max(obstacle.x, r), Math.max(r, roofW - r));
+    const cy = Math.min(Math.max(obstacle.y, r), Math.max(r, roofH - r));
+    return { x: cx, y: cy, widthM: r * 2, heightM: r * 2, radiusM: r };
+  }
+  const widthM = Math.min(Math.max(0.2, obstacle.widthM), roofW);
+  const heightM = Math.min(Math.max(0.2, obstacle.heightM), roofH);
+  const x = Math.min(Math.max(0, obstacle.x), Math.max(0, roofW - widthM));
+  const y = Math.min(Math.max(0, obstacle.y), Math.max(0, roofH - heightM));
+  return { x, y, widthM, heightM };
 }
 
 export function anyObstacleHits(

@@ -643,31 +643,141 @@ function LayoutPanel() {
       <PrimaryButton label="Adicionar obstáculo" onPress={onAddObstacle} style={styles.cta} />
       {ws.obstacles.length > 0 ? (
         <View style={{ marginBottom: 12, gap: 8 }}>
-          {ws.obstacles.map((o) => (
-            <View
-              key={o.id}
-              style={[
-                styles.obsRow,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <Text style={{ flex: 1, color: colors.text, fontFamily: 'DMSans_400Regular', fontSize: 13 }}>
-                {o.label} · {o.shape === 'circle' ? '⌀' : ''}
-                {formatNumber(o.widthM)}×{formatNumber(o.heightM)} m · folga{' '}
-                {formatNumber(o.clearanceM)} m
-              </Text>
-              <Pressable onPress={() => ws.removeObstacle(o.id)}>
-                <Text style={{ color: colors.primary, fontFamily: 'Outfit_600SemiBold', fontSize: 13 }}>
-                  Remover
+          {ws.obstacles.map((o) => {
+            const active = o.id === ws.selectedObstacleId;
+            return (
+              <Pressable
+                key={o.id}
+                onPress={() => ws.setSelectedObstacleId(o.id)}
+                style={[
+                  styles.obsRow,
+                  {
+                    backgroundColor: active ? colors.primarySoft : colors.surface,
+                    borderColor: active ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    flex: 1,
+                    color: colors.text,
+                    fontFamily: 'DMSans_400Regular',
+                    fontSize: 13,
+                  }}
+                >
+                  {o.label} · {o.shape === 'circle' ? '⌀' : ''}
+                  {formatNumber(o.widthM)}×{formatNumber(o.heightM)} m · X{' '}
+                  {formatNumber(o.x)} Y {formatNumber(o.y)}
+                  {(o.rotationDeg ?? 0) !== 0 ? ` · ${formatNumber(o.rotationDeg ?? 0, 0)}°` : ''}
                 </Text>
+                <Pressable onPress={() => ws.removeObstacle(o.id)}>
+                  <Text
+                    style={{ color: colors.primary, fontFamily: 'Outfit_600SemiBold', fontSize: 13 }}
+                  >
+                    Remover
+                  </Text>
+                </Pressable>
               </Pressable>
-            </View>
-          ))}
+            );
+          })}
           <Pressable onPress={ws.clearObstacles}>
             <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_500Medium', fontSize: 13 }}>
               Limpar todos os obstáculos
             </Text>
           </Pressable>
+        </View>
+      ) : null}
+
+      {ws.selectedObstacle ? (
+        <View
+          style={[
+            styles.toolbar,
+            { backgroundColor: colors.surface, borderColor: colors.primary },
+          ]}
+        >
+          <Text style={[styles.section, { color: colors.text, marginBottom: 4 }]}>
+            Obstáculo selecionado · {ws.selectedObstacle.label}
+          </Text>
+          <Text style={[styles.sectionHint, { color: colors.textSecondary, marginBottom: 10 }]}>
+            Arraste no canvas ou ajuste finamente abaixo. O arranjo de placas atualiza em tempo real.
+          </Text>
+          <View style={styles.dimRow}>
+            <View style={styles.dimCol}>
+              <InputField
+                label="Posição X (m)"
+                value={String(ws.selectedObstacle.x).replace('.', ',')}
+                onChangeText={(t) => {
+                  const v = parseLocaleNumber(t);
+                  if (Number.isFinite(v)) ws.moveObstacle(ws.selectedObstacle!.id, v, ws.selectedObstacle!.y);
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0"
+              />
+            </View>
+            <View style={styles.dimCol}>
+              <InputField
+                label="Posição Y (m)"
+                value={String(ws.selectedObstacle.y).replace('.', ',')}
+                onChangeText={(t) => {
+                  const v = parseLocaleNumber(t);
+                  if (Number.isFinite(v)) ws.moveObstacle(ws.selectedObstacle!.id, ws.selectedObstacle!.x, v);
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0"
+              />
+            </View>
+          </View>
+          <View style={styles.dimRow}>
+            <View style={styles.dimCol}>
+              <InputField
+                label="Largura (m)"
+                value={String(ws.selectedObstacle.widthM).replace('.', ',')}
+                onChangeText={(t) => {
+                  const v = parseLocaleNumber(t);
+                  if (Number.isFinite(v) && v > 0) {
+                    ws.updateObstacle(ws.selectedObstacle!.id, {
+                      widthM: v,
+                      radiusM:
+                        ws.selectedObstacle!.shape === 'circle'
+                          ? v / 2
+                          : ws.selectedObstacle!.radiusM,
+                    });
+                  }
+                }}
+                keyboardType="decimal-pad"
+              />
+            </View>
+            <View style={styles.dimCol}>
+              <InputField
+                label="Comprimento (m)"
+                value={String(ws.selectedObstacle.heightM).replace('.', ',')}
+                onChangeText={(t) => {
+                  const v = parseLocaleNumber(t);
+                  if (Number.isFinite(v) && v > 0) {
+                    ws.updateObstacle(ws.selectedObstacle!.id, { heightM: v });
+                  }
+                }}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          </View>
+          <View style={styles.rotateRow}>
+            <Pressable
+              onPress={() => ws.rotateObstacle(ws.selectedObstacle!.id, -15)}
+              style={[styles.rotateBtn, { borderColor: colors.border }]}
+            >
+              <Text style={{ color: colors.text, fontFamily: 'Outfit_600SemiBold' }}>↺ −15°</Text>
+            </Pressable>
+            <Text style={{ color: colors.textSecondary, fontFamily: 'DMSans_500Medium', fontSize: 13 }}>
+              Rotação {formatNumber(ws.selectedObstacle.rotationDeg ?? 0, 0)}°
+            </Text>
+            <Pressable
+              onPress={() => ws.rotateObstacle(ws.selectedObstacle!.id, 15)}
+              style={[styles.rotateBtn, { borderColor: colors.border }]}
+            >
+              <Text style={{ color: colors.text, fontFamily: 'Outfit_600SemiBold' }}>↻ +15°</Text>
+            </Pressable>
+          </View>
         </View>
       ) : null}
 
@@ -678,7 +788,7 @@ function LayoutPanel() {
         />
       ) : null}
 
-      {ws.layoutOptions.length > 0 ? (
+      {ws.layoutOptions.length > 0 || ws.hasRoofGeometry ? (
         <>
           <View
             style={[
@@ -687,7 +797,7 @@ function LayoutPanel() {
             ]}
           >
             <Text style={[styles.optimizedLabel, { color: colors.primary }]}>
-              Resultado do layout
+              Resultado do layout (ao vivo)
             </Text>
             <Text style={[styles.optimizedTitle, { color: colors.text }]}>
               {formatOptimizedArrangement(ws.activeLayout ?? ws.bestLayout)}
@@ -700,38 +810,52 @@ function LayoutPanel() {
             </Text>
           </View>
 
-          <Text style={[styles.section, { color: colors.text }]}>Layouts sugeridos</Text>
-          <View style={styles.layoutTabs}>
-            {ws.layoutOptions.map((option) => {
-              const active = option.id === ws.activeLayout?.id;
-              return (
-                <Pressable
-                  key={option.id}
-                  onPress={() => ws.setSelectedLayoutId(option.id)}
-                  style={[
-                    styles.layoutTab,
-                    {
-                      backgroundColor: active ? colors.primarySoft : colors.surface,
-                      borderColor: active ? colors.primary : colors.border,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.layoutTabTitle, { color: colors.text }]}>
-                    {option.label}
-                  </Text>
-                  <Text style={[styles.layoutTabMeta, { color: colors.textSecondary }]}>
-                    {option.panelCount} placas · {option.orientationSummary}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          {ws.layoutOptions.length > 0 ? (
+            <>
+              <Text style={[styles.section, { color: colors.text }]}>Layouts sugeridos</Text>
+              <View style={styles.layoutTabs}>
+                {ws.layoutOptions.map((option) => {
+                  const active = option.id === ws.activeLayout?.id;
+                  return (
+                    <Pressable
+                      key={option.id}
+                      onPress={() => ws.setSelectedLayoutId(option.id)}
+                      style={[
+                        styles.layoutTab,
+                        {
+                          backgroundColor: active ? colors.primarySoft : colors.surface,
+                          borderColor: active ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.layoutTabTitle, { color: colors.text }]}>
+                        {option.label}
+                      </Text>
+                      <Text style={[styles.layoutTabMeta, { color: colors.textSecondary }]}>
+                        {option.panelCount} placas · {option.orientationSummary}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
 
           <RoofLayoutCanvas
             option={ws.activeLayout}
             polygon={ws.polygonMeters ?? undefined}
             obstacles={ws.obstacles}
-            interactive={false}
+            selectedObstacleId={ws.selectedObstacleId}
+            onSelectObstacle={ws.setSelectedObstacleId}
+            onMoveObstacle={ws.moveObstacle}
+            onResizeObstacle={(id, w, h) =>
+              ws.updateObstacle(id, {
+                widthM: w,
+                heightM: h,
+                radiusM: w / 2,
+              })
+            }
+            interactive
           />
 
           {ws.activeLayout ? (
@@ -782,7 +906,7 @@ function LayoutPanel() {
 
       <HelpCard
         title="Como o Layout 2D otimiza?"
-        body="Recorta a área útil do polígono (ou retângulo), respeita mid clamps (2 cm), end clamps nas pontas e keep-outs dos obstáculos. Testa Vertical, Horizontal e Misto e escolhe o máximo de placas."
+        body="Arraste obstáculos pelo telhado (touch ou mouse). Ao mover, o packing recalcula Vertical/Horizontal/Misto em tempo real, contornando keep-outs com mid/end clamps."
       />
     </>
   );
@@ -939,5 +1063,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 10,
+  },
+  toolbar: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 16,
+  },
+  rotateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 4,
+  },
+  rotateBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
 });

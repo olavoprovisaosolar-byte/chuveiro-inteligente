@@ -109,6 +109,8 @@ export interface RoofObstacle {
   radiusM?: number;
   /** Afastamento de segurança ao redor do obstáculo (m). */
   clearanceM: number;
+  /** Rotação em graus (horário positivo). Círculos ignoram. */
+  rotationDeg?: number;
 }
 
 export interface RoofPolygon {
