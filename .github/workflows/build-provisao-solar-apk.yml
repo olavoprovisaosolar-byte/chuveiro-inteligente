@@ -5,6 +5,7 @@ on:
     branches:
       - cursor/provisao-solar-app-f794
       - cursor/telhado-arranjo-layout-f794
+      - cursor/apk-signing-estavel-f794
       - master
       - main
     paths:
