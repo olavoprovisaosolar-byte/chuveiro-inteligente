@@ -66,6 +66,8 @@ const layouts = computeRoofLayouts({
   roofLengthM: 12,
   module: module550,
   edgeMarginM: 0.5,
+  panelGapM: 0.02,
+  endClampM: 0.03,
 });
 assert(layouts.options.length === 2, 'Duas opções de layout');
 assert(layouts.options[0].panelCount > 0, 'Opção A deve caber placas');
@@ -82,8 +84,49 @@ assert(
     layouts.options[0].orientationSummary.includes('Horizontal'),
   'Resumo de orientação Vertical/Horizontal',
 );
+assert(layouts.totalRoofAreaM2 > 0, 'Área total do telhado');
+
+// Polígono L-shape + obstáculo: deve caber menos que o retângulo pleno
+const polyLayouts = computeRoofLayouts({
+  polygon: [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 6 },
+    { x: 4, y: 6 },
+    { x: 4, y: 10 },
+    { x: 0, y: 10 },
+  ],
+  obstacles: [
+    {
+      id: 'chimney-1',
+      kind: 'chimney',
+      label: 'Chaminé',
+      shape: 'rect',
+      x: 1,
+      y: 1,
+      widthM: 1.2,
+      heightM: 1.2,
+      clearanceM: 0.4,
+    },
+  ],
+  module: module550,
+  edgeMarginM: 0.3,
+  panelGapM: 0.02,
+  endClampM: 0.03,
+});
+assert(polyLayouts.options[0].panelCount > 0, 'Polígono irregular deve caber placas');
+assert(
+  polyLayouts.options[0].placements.every(
+    (p) =>
+      !(p.x < 2.6 && p.y < 2.6 && p.x + p.width > 0.6 && p.y + p.height > 0.6),
+  ),
+  'Nenhuma placa sobre obstáculo+clearance',
+);
 
 console.log('✅ Self-test de cálculos OK');
 console.log(
   `   Layout 8×12 m / 550 Wp: máx ${layouts.options[0].panelCount} placas (${layouts.options[0].orientationSummary})`,
+);
+console.log(
+  `   Polígono L + chaminé: máx ${polyLayouts.options[0].panelCount} placas · área ${polyLayouts.totalRoofAreaM2} m²`,
 );

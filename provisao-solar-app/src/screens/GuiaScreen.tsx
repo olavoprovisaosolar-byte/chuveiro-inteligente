@@ -70,7 +70,7 @@ const FORMULAS = [
   },
   {
     title: 'Layout 2D — distribuição espacial',
-    body: 'Área útil = (Largura − 2×folga) × (Comprimento − 2×folga)\nTesta Vertical, Horizontal e Misto\nEscolhe o arranjo com a maior quantidade de placas\nPlaca: Comprimento × Largura (m ou mm no cadastro)',
+    body: 'Área útil = polígono/retângulo − folga de borda − obstáculos\nMid clamp entre placas: 0,02 m\nEnd clamp nas pontas: 0,02–0,05 m\nTesta Vertical, Horizontal e Misto (evita keep-outs)\nEscolhe o arranjo com a maior quantidade de placas',
   },
 ];
 

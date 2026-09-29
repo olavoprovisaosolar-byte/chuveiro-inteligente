@@ -113,8 +113,14 @@ export const DEFAULT_AREA_MARGIN = 0.1;
 /** Folga de borda do telhado para manutenção/arranjo (metros). */
 export const DEFAULT_EDGE_MARGIN_M = 0.5;
 
-/** Espaçamento mínimo entre placas no arranjo (metros). */
+/** Espaçamento entre placas — grampos intermediários / mid clamps (metros). */
 export const DEFAULT_PANEL_GAP_M = 0.02;
+
+/** Folga nas pontas da fileira — grampos finais / end clamps (metros). */
+export const DEFAULT_END_CLAMP_M = 0.03;
+
+/** Afastamento de segurança ao redor de obstáculos (metros). */
+export const DEFAULT_OBSTACLE_CLEARANCE_M = 0.4;
 
 /** Geração estimada: 100 kWh/mês por kWp. */
 export const KWH_PER_KWP_MONTH = 100;
