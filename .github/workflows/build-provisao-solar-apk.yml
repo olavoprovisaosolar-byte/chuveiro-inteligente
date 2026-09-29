@@ -51,8 +51,15 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
         run: npx expo prebuild --platform android --non-interactive --clean
 
-      - name: Sign release builds with debug keystore
+      - name: Sign release builds with stable keystore
         run: python3 scripts/patch-android-release-signing.py android/app/build.gradle
+
+      - name: Verify stable signing config in Gradle
+        run: |
+          grep -q "signingConfigs.release" android/app/build.gradle
+          test -f android/app/solar-calculator.keystore
+          test -f android/keystore.properties
+          echo "Stable signing files present"
 
       - name: Unlock orientation for tablets (TL10)
         run: python3 scripts/patch-android-orientation.py android/app/src/main/AndroidManifest.xml

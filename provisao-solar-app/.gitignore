@@ -17,6 +17,8 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+# Keep the stable internal-distribution keystore (see android-signing/)
+!android-signing/solar-calculator.keystore
 
 # Metro
 .metro-health-check*
