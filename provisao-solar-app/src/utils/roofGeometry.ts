@@ -42,9 +42,34 @@ export function boundingBox(vertices: Point2D[]): {
   return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
 }
 
-/** Ray-casting point-in-polygon. */
+/** Ponto sobre aresta (inclusive), com tolerância numérica. */
+function pointOnSegment(point: Point2D, a: Point2D, b: Point2D, eps = 1e-9): boolean {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const apx = point.x - a.x;
+  const apy = point.y - a.y;
+  const cross = apx * aby - apy * abx;
+  const len = Math.hypot(abx, aby);
+  if (len <= eps) {
+    return Math.hypot(apx, apy) <= eps;
+  }
+  if (Math.abs(cross) > eps * Math.max(1, len)) return false;
+  const dot = apx * abx + apy * aby;
+  if (dot < -eps) return false;
+  if (dot > len * len + eps) return false;
+  return true;
+}
+
+/**
+ * Ray-casting point-in-polygon.
+ * Pontos exatamente sobre a borda contam como dentro — necessário para
+ * encaixar placas “flush” (borda zero) na margem do telhado.
+ */
 export function pointInPolygon(point: Point2D, vertices: Point2D[]): boolean {
   if (vertices.length < 3) return false;
+  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i, i += 1) {
+    if (pointOnSegment(point, vertices[j], vertices[i])) return true;
+  }
   let inside = false;
   for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i, i += 1) {
     const xi = vertices[i].x;

@@ -156,10 +156,43 @@ assert(
   'Obstáculo rotacionado reduz placas vs telhado livre',
 );
 
+// 5×8 m / folga 0,1 m: 12 verticais deixam ~0,95 m; deve emprestar borda
+// (borda zero) e encaixar +2 horizontais na faixa inferior → 14 placas.
+const fillStrip = computeRoofLayouts({
+  roofWidthM: 5,
+  roofLengthM: 8,
+  module: module550,
+  edgeMarginM: 0.1,
+  panelGapM: 0.02,
+  endClampM: 0.03,
+});
+assert(
+  fillStrip.options[0].panelCount >= 14,
+  `5×8 deve caber ≥14 com misto/borda zero, veio ${fillStrip.options[0].panelCount}`,
+);
+assert(
+  fillStrip.options[0].placements.some((p) => p.orientation === 'landscape'),
+  'Faixa residual deve usar placas na Horizontal',
+);
+assert(
+  fillStrip.options[0].placements.some((p) => p.orientation === 'portrait'),
+  'Arranjo misto mantém placas na Vertical',
+);
+const stripMaxY = Math.max(
+  ...fillStrip.options[0].placements.map((p) => p.y + p.height),
+);
+assert(
+  stripMaxY >= 7.99,
+  `Placas devem chegar à borda inferior (y≈8), veio ${stripMaxY}`,
+);
+
 console.log('✅ Self-test de cálculos OK');
 console.log(
   `   Layout 8×12 m / 550 Wp: máx ${layouts.options[0].panelCount} placas (${layouts.options[0].orientationSummary})`,
 );
 console.log(
   `   Polígono L + chaminé: máx ${polyLayouts.options[0].panelCount} placas · área ${polyLayouts.totalRoofAreaM2} m²`,
+);
+console.log(
+  `   Layout 5×8 m / folga 0,1: máx ${fillStrip.options[0].panelCount} placas (${fillStrip.options[0].orientationSummary}) · base y=${stripMaxY}`,
 );

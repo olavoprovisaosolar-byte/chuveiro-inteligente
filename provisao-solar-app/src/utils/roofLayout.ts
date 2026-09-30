@@ -104,6 +104,61 @@ function toOption(params: {
   };
 }
 
+function overlapsAny(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rects: Array<{ x: number; y: number; w: number; h: number }>,
+): boolean {
+  return rects.some(
+    (o) => x < o.x + o.w && x + w > o.x && y < o.y + o.h && y + h > o.y,
+  );
+}
+
+/** Empacota uma fileira (shelf) de placas na orientação dada, em y fixo. */
+function packShelfRow(params: {
+  y: number;
+  panelW: number;
+  panelH: number;
+  orientation: PanelOrientation;
+  startX: number;
+  endX: number;
+  gap: number;
+  polygon: Point2D[];
+  obstacles: RoofObstacle[];
+  blocked: Array<{ x: number; y: number; w: number; h: number }>;
+  idPrefix: string;
+  indexStart: number;
+}): PanelPlacement[] {
+  const stepX = params.panelW + params.gap;
+  const placements: PanelPlacement[] = [];
+  let index = params.indexStart;
+  for (let x = params.startX; x + params.panelW <= params.endX + 1e-9; x += stepX) {
+    if (!rectInsidePolygon(x, params.y, params.panelW, params.panelH, params.polygon)) {
+      continue;
+    }
+    if (anyObstacleHits(params.obstacles, x, params.y, params.panelW, params.panelH)) {
+      continue;
+    }
+    if (overlapsAny(x, params.y, params.panelW, params.panelH, params.blocked)) {
+      continue;
+    }
+    placements.push({
+      id: `${params.idPrefix}-${index}`,
+      x: round2(x),
+      y: round2(params.y),
+      width: params.panelW,
+      height: params.panelH,
+      orientation: params.orientation,
+      rotationDeg: params.orientation === 'landscape' ? 90 : 0,
+      selectable: true,
+    });
+    index += 1;
+  }
+  return placements;
+}
+
 /**
  * Empacota placas em malha regular, aceitando só células 100% dentro do polígono
  * e fora dos obstáculos (com clearance).
@@ -117,15 +172,17 @@ function packUniformInPolygon(params: {
   endClampM: number;
   edgeMarginM: number;
   idPrefix: string;
+  /** Permite sobrescrever a banda útil (ex.: após “emprestar” folga de borda). */
+  bounds?: { startX: number; endX: number; startY: number; endY: number };
 }): { count: number; placements: PanelPlacement[] } {
   const { w: panelW, h: panelH } = panelSize(params.module, params.orientation);
   if (panelW <= 0 || panelH <= 0) return { count: 0, placements: [] };
 
   const box = boundingBox(params.polygon);
-  const startX = box.minX + params.edgeMarginM + params.endClampM;
-  const startY = box.minY + params.edgeMarginM;
-  const endX = box.maxX - params.edgeMarginM - params.endClampM;
-  const endY = box.maxY - params.edgeMarginM;
+  const startX = params.bounds?.startX ?? box.minX + params.edgeMarginM + params.endClampM;
+  const startY = params.bounds?.startY ?? box.minY + params.edgeMarginM;
+  const endX = params.bounds?.endX ?? box.maxX - params.edgeMarginM - params.endClampM;
+  const endY = params.bounds?.endY ?? box.maxY - params.edgeMarginM;
   const stepX = panelW + params.gap;
   const stepY = panelH + params.gap;
 
@@ -155,76 +212,226 @@ function packUniformInPolygon(params: {
   return { count: placements.length, placements };
 }
 
+type ShelfOrient = PanelOrientation;
+
 /**
- * Misto: preenche com orientação primária e tenta encaixar secundária nas falhas
- * da malha (varredura fina).
+ * Packing por prateleiras (shelves): escolhe a sequência de fileiras
+ * Vertical/Horizontal que maximiza a quantidade de placas.
+ * Também tenta preencher a faixa residual inferior com a outra orientação.
  */
-function packMixedInPolygon(params: {
+function packShelfMixed(params: {
   polygon: Point2D[];
   obstacles: RoofObstacle[];
   module: SolarModule;
-  primary: PanelOrientation;
   gap: number;
   endClampM: number;
   edgeMarginM: number;
-}): { count: number; placements: PanelPlacement[] } {
-  const primary = packUniformInPolygon({
-    ...params,
-    orientation: params.primary,
-    idPrefix: `mix-${params.primary}`,
-  });
-  const secondary: PanelOrientation =
-    params.primary === 'portrait' ? 'landscape' : 'portrait';
-  const { w: panelW, h: panelH } = panelSize(params.module, secondary);
+  /** Se true, pode reduzir a folga de borda o mínimo para caber +1 fileira residual. */
+  borrowEdgeForRemainder?: boolean;
+}): { count: number; placements: PanelPlacement[]; edgeUsedM: number } {
   const box = boundingBox(params.polygon);
-  const occupied = primary.placements.map((p) => ({
-    x: p.x,
-    y: p.y,
-    w: p.width,
-    h: p.height,
-  }));
+  const gap = params.gap;
 
-  const startX = box.minX + params.edgeMarginM + params.endClampM;
-  const startY = box.minY + params.edgeMarginM;
-  const endX = box.maxX - params.edgeMarginM - params.endClampM;
-  const endY = box.maxY - params.edgeMarginM;
-  const step = Math.min(panelW, panelH, 0.25);
-
-  const extras: PanelPlacement[] = [];
-  let index = 0;
-  for (let y = startY; y + panelH <= endY + 1e-9; y += step) {
-    for (let x = startX; x + panelW <= endX + 1e-9; x += step) {
-      if (!rectInsidePolygon(x, y, panelW, panelH, params.polygon)) continue;
-      if (anyObstacleHits(params.obstacles, x, y, panelW, panelH)) continue;
-      const hitsOccupied = occupied.some(
-        (o) =>
-          x < o.x + o.w && x + panelW > o.x && y < o.y + o.h && y + panelH > o.y,
-      );
-      if (hitsOccupied) continue;
-      const hitsExtra = extras.some(
-        (o) =>
-          x < o.x + o.width &&
-          x + panelW > o.x &&
-          y < o.y + o.height &&
-          y + panelH > o.y,
-      );
-      if (hitsExtra) continue;
-      extras.push({
-        id: `mix-${secondary}-${index}`,
-        x: round2(x),
-        y: round2(y),
-        width: panelW,
-        height: panelH,
-        orientation: secondary,
-        rotationDeg: secondary === 'landscape' ? 90 : 0,
-        selectable: true,
-      });
-      index += 1;
+  const tryWithEdges = (edgeTop: number, edgeBottom: number, edgeX: number) => {
+    const startX = box.minX + edgeX + params.endClampM;
+    const endX = box.maxX - edgeX - params.endClampM;
+    const startY = box.minY + edgeTop;
+    const endY = box.maxY - edgeBottom;
+    const usableL = endY - startY;
+    const usableW = endX - startX;
+    if (usableL <= 0 || usableW <= 0) {
+      return { count: 0, placements: [] as PanelPlacement[], edgeUsedM: edgeX };
     }
+
+    const sizes: Record<ShelfOrient, { w: number; h: number }> = {
+      portrait: panelSize(params.module, 'portrait'),
+      landscape: panelSize(params.module, 'landscape'),
+    };
+
+    // DP: melhor contagem para altura exata usada (discretizada em mm)
+    const scale = 1000;
+    const H = Math.max(0, Math.floor(usableL * scale + 1e-6));
+    const shelfHeights: Array<{ orient: ShelfOrient; h: number; cols: number }> = [];
+    (['portrait', 'landscape'] as ShelfOrient[]).forEach((orient) => {
+      const { w, h } = sizes[orient];
+      const cols = Math.floor((usableW + gap) / (w + gap));
+      if (cols > 0 && h > 0) {
+        shelfHeights.push({ orient, h, cols });
+      }
+    });
+
+    const bestCount = new Array(H + 1).fill(-1);
+    const parent: Array<{ prev: number; orient: ShelfOrient; h: number } | null> = new Array(
+      H + 1,
+    ).fill(null);
+    bestCount[0] = 0;
+
+    for (let h = 0; h <= H; h += 1) {
+      if (bestCount[h] < 0) continue;
+      for (const shelf of shelfHeights) {
+        const shelfMm = Math.ceil(shelf.h * scale - 1e-6);
+        const gapMm = h === 0 ? 0 : Math.ceil(gap * scale - 1e-6);
+        const next = h + gapMm + shelfMm;
+        if (next > H) continue;
+        const cand = bestCount[h] + shelf.cols;
+        // >= permite que fileiras posteriores (ex.: Horizontal na base) substituam
+        // caminhos equivalentes, privilegiando Vertical no topo + residual embaixo.
+        if (cand >= bestCount[next]) {
+          bestCount[next] = cand;
+          parent[next] = { prev: h, orient: shelf.orient, h: shelf.h };
+        }
+      }
+    }
+
+    // Escolhe a altura usada com maior contagem (prefere preencher mais o vão)
+    let bestH = 0;
+    for (let h = 0; h <= H; h += 1) {
+      if (bestCount[h] > bestCount[bestH]) bestH = h;
+      else if (bestCount[h] === bestCount[bestH] && h > bestH) bestH = h;
+    }
+
+    // Reconstrói sequência de prateleiras (do fim para o início)
+    const sequence: Array<{ orient: ShelfOrient; h: number }> = [];
+    let cur = bestH;
+    while (cur > 0 && parent[cur]) {
+      const p = parent[cur]!;
+      sequence.push({ orient: p.orient, h: p.h });
+      cur = p.prev;
+    }
+    sequence.reverse();
+
+    // Materializa placements (topo → base). Se sobrar vão no fim, tenta +1 fileira residual.
+    const placements: PanelPlacement[] = [];
+    const blocked: Array<{ x: number; y: number; w: number; h: number }> = [];
+    let y = startY;
+    let index = 0;
+    for (let i = 0; i < sequence.length; i += 1) {
+      if (i > 0) y += gap;
+      const { orient, h: shelfH } = sequence[i];
+      const { w: panelW, h: panelH } = sizes[orient];
+      const row = packShelfRow({
+        y,
+        panelW,
+        panelH,
+        orientation: orient,
+        startX,
+        endX,
+        gap,
+        polygon: params.polygon,
+        obstacles: params.obstacles,
+        blocked,
+        idPrefix: `shelf-${orient}`,
+        indexStart: index,
+      });
+      for (const p of row) {
+        placements.push(p);
+        blocked.push({ x: p.x, y: p.y, w: p.width, h: p.height });
+      }
+      index += row.length;
+      y += shelfH;
+    }
+
+    // Preenche faixa residual inferior (e laterais via scan fino) com ambas orientações
+    const fillRemainder = (orient: ShelfOrient) => {
+      const { w: panelW, h: panelH } = sizes[orient];
+      // Alinha a fileira residual na base útil quando possível
+      const bottomY = endY - panelH;
+      const candidateYs = [bottomY, y + (sequence.length > 0 ? gap : 0)];
+      for (const cy of candidateYs) {
+        if (cy < startY - 1e-9 || cy + panelH > endY + 1e-9) continue;
+        const row = packShelfRow({
+          y: cy,
+          panelW,
+          panelH,
+          orientation: orient,
+          startX,
+          endX,
+          gap,
+          polygon: params.polygon,
+          obstacles: params.obstacles,
+          blocked,
+          idPrefix: `rem-${orient}`,
+          indexStart: index,
+        });
+        if (row.length === 0) continue;
+        for (const p of row) {
+          placements.push(p);
+          blocked.push({ x: p.x, y: p.y, w: p.width, h: p.height });
+        }
+        index += row.length;
+      }
+      // Scan fino no retângulo residual para nichos (obstáculos / polígono)
+      const scanStart = Math.min(y, bottomY);
+      const step = Math.min(panelW, panelH, 0.2);
+      for (let sy = Math.max(startY, scanStart); sy + panelH <= endY + 1e-9; sy += step) {
+        for (let sx = startX; sx + panelW <= endX + 1e-9; sx += step) {
+          if (!rectInsidePolygon(sx, sy, panelW, panelH, params.polygon)) continue;
+          if (anyObstacleHits(params.obstacles, sx, sy, panelW, panelH)) continue;
+          if (overlapsAny(sx, sy, panelW, panelH, blocked)) continue;
+          const p: PanelPlacement = {
+            id: `scan-${orient}-${index}`,
+            x: round2(sx),
+            y: round2(sy),
+            width: panelW,
+            height: panelH,
+            orientation: orient,
+            rotationDeg: orient === 'landscape' ? 90 : 0,
+            selectable: true,
+          };
+          placements.push(p);
+          blocked.push({ x: p.x, y: p.y, w: p.width, h: p.height });
+          index += 1;
+        }
+      }
+    };
+
+    fillRemainder('landscape');
+    fillRemainder('portrait');
+
+    return {
+      count: placements.length,
+      placements,
+      edgeUsedM: edgeX,
+    };
+  };
+
+  // Tentativa com a folga configurada
+  let best = tryWithEdges(params.edgeMarginM, params.edgeMarginM, params.edgeMarginM);
+
+  if (params.borrowEdgeForRemainder && params.edgeMarginM > 0) {
+    const landH = panelSize(params.module, 'landscape').h;
+    const portH = panelSize(params.module, 'portrait').h;
+    const minShelf = Math.min(landH, portH);
+    // Empresta o mínimo da folga vertical para caber +1 fileira residual
+    for (const shelfH of [landH, portH, minShelf]) {
+      const startY = box.minY + params.edgeMarginM;
+      const endY = box.maxY - params.edgeMarginM;
+      // Estima vão residual após preencher com prateleiras da outra altura
+      const otherH = shelfH === landH ? portH : landH;
+      const nOther = Math.floor((endY - startY + gap) / (otherH + gap));
+      const used =
+        nOther > 0 ? nOther * otherH + (nOther - 1) * gap : 0;
+      const leftover = endY - startY - used - (nOther > 0 ? gap : 0);
+      if (leftover + 1e-9 >= shelfH) continue; // já cabe sem emprestar
+      const shortfall = shelfH - Math.max(0, leftover);
+      if (shortfall <= 0) continue;
+      // Reduz folga inferior (e superior se preciso); pode zerar as duas bordas
+      let edgeBottom = params.edgeMarginM - shortfall;
+      let edgeTop = params.edgeMarginM;
+      if (edgeBottom < 0) {
+        edgeTop = Math.max(0, edgeTop + edgeBottom);
+        edgeBottom = 0;
+      }
+      const cand = tryWithEdges(edgeTop, edgeBottom, params.edgeMarginM);
+      if (cand.count > best.count) best = cand;
+    }
+
+    // Folga zero nas bordas: máximo absoluto (borda justamente zero)
+    const tight = tryWithEdges(0, 0, 0);
+    if (tight.count > best.count) best = tight;
   }
 
-  const placements = [...primary.placements, ...extras];
-  return { count: placements.length, placements };
+  return best;
 }
 
 /**
@@ -283,9 +490,12 @@ export function computeRoofLayouts(params: {
     orientation: 'landscape',
     idPrefix: 'l',
   });
-  const mixedA = packMixedInPolygon({ ...base, primary: 'portrait' });
-  const mixedB = packMixedInPolygon({ ...base, primary: 'landscape' });
-  const mixed = mixedA.count >= mixedB.count ? mixedA : mixedB;
+
+  // Mistura por prateleiras + preenchimento da faixa inferior (com empréstimo mínimo de borda)
+  const mixed = packShelfMixed({
+    ...base,
+    borrowEdgeForRemainder: true,
+  });
 
   const usableW = Math.max(0, roofWidthM - 2 * edgeMarginM - 2 * endClampM);
   const usableL = Math.max(0, roofLengthM - 2 * edgeMarginM);
@@ -321,7 +531,7 @@ export function computeRoofLayouts(params: {
   });
   const mixedOpt = toOption({
     id: 'mixed',
-    label: 'Arranjo misto',
+    label: 'Arranjo misto (preenche faixas)',
     strategy: 'mixed',
     placements: mixed.placements,
     ...common,
