@@ -1,13 +1,5 @@
 import { formatNumber } from './calculations';
-import {
-  LEAD_BATTERY_AH,
-  LEAD_BATTERY_V,
-  LITHIUM_MODULE_AH,
-  LITHIUM_MODULE_KWH,
-  LITHIUM_MODULE_V,
-  OffGridLoadInput,
-  OffGridLoadResult,
-} from './offGridLoad';
+import { batteryModelById, OffGridLoadInput, OffGridLoadResult } from './offGridLoad';
 
 function esc(value: string): string {
   return value
@@ -35,20 +27,14 @@ export function describeTransformer(result: OffGridLoadResult): string {
   return `Autotransformador 127/220 V sugerido: ${formatNumber(result.transformerSuggestedKva)} kVA (potência calculada ${kw(result.transformerW)}, com 30% de folga).`;
 }
 
-export function describeBatteryBank(input: OffGridLoadInput, result: OffGridLoadResult): string {
-  if (input.batteryTech === 'lithium') {
-    const busNote =
-      input.busVoltageV === LITHIUM_MODULE_V
-        ? ''
-        : ` Os módulos são de ${LITHIUM_MODULE_V} V; o barramento selecionado é ${input.busVoltageV} V.`;
-    return `${result.lithiumModules}× módulos lítio ${LITHIUM_MODULE_V} V ${LITHIUM_MODULE_AH} Ah (${formatNumber(LITHIUM_MODULE_KWH)} kWh).${busNote}`;
-  }
-  return `${result.leadTotal}× baterias ${LEAD_BATTERY_V} V ${LEAD_BATTERY_AH} Ah · arranjo ${result.leadSeries}S${result.leadParallel}P (${result.leadParallel} strings de ${result.leadSeries} em série).`;
+export function describeBatteryBank(_input: OffGridLoadInput, result: OffGridLoadResult): string {
+  if (!result.bank.compatible) return result.bank.wiring;
+  return `${result.bank.headline}. ${result.bank.wiring}.`;
 }
 
 export function describeDod(result: OffGridLoadResult): string {
-  if (result.dodApplied == null) return 'Capacidade bruta (DoD ignorado)';
-  return `Considerando DoD de ${formatNumber(result.dodApplied * 100, 0)}%`;
+  if (result.dodApplied == null) return 'Capacidade bruta máx. / DoD ignorado';
+  return `${formatNumber(result.dodApplied * 100, 0)}% DoD aplicado`;
 }
 
 /** HTML imprimível do relatório técnico de campo. */
@@ -60,7 +46,8 @@ export function buildOffGridReportHtml(input: OffGridLoadInput, result: OffGridL
   ]
     .filter(Boolean)
     .join(' · ');
-  const tech = input.batteryTech === 'lithium' ? 'Lítio (LiFePO4)' : 'Chumbo-ácido / gel';
+  const model = batteryModelById(input.batteryModelId);
+  const tech = model.tech === 'lithium' ? 'Lítio (LiFePO4)' : 'Estacionária (chumbo-ácido)';
   const materials = [
     `Inversor off-grid ${formatNumber(result.inverterSuggestedKw)} kW (mínimo calculado ${kw(result.inverterMinW)}, ocupação ${pct(result.utilizationFactor)})`,
     describeTransformer(result),
@@ -86,8 +73,15 @@ export function buildOffGridReportHtml(input: OffGridLoadInput, result: OffGridL
     ['Eficiência do inversor', pct(input.inverterEfficiency)],
     ['Barramento CC', `${input.busVoltageV} V`],
     ['Tecnologia', tech],
-    ['Banco', `${formatNumber(result.batteryGrossWh / 1000)} kWh · ${formatNumber(result.capacityAh, 0)} Ah`],
+    ['Modelo', model.name],
+    ['Banco', result.bank.headline],
+    ['Ligação', result.bank.wiring],
+    ['Energia útil requerida', `${formatNumber(result.energyWh / 1000)} kWh`],
+    ['Energia bruta requerida', `${formatNumber(result.batteryGrossWh / 1000)} kWh`],
+    ['Banco instalado', `${formatNumber(result.bank.installedGrossWh / 1000)} kWh brutos · ${formatNumber(result.bank.installedUsefulWh / 1000)} kWh úteis`],
     ['DoD', describeDod(result)],
+    ['Alternativa lítio', result.comparison.lithium.headline],
+    ['Alternativa estacionária', result.comparison.stationary.headline],
   ];
 
   const table = rows

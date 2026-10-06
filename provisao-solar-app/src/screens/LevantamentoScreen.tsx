@@ -12,19 +12,17 @@ import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme } from '../theme/ThemeContext';
 import { formatNumber, parseLocaleNumber } from '../utils/calculations';
 import {
+  BatteryModelId,
   BatteryTech,
   BusVoltageV,
   calculateOffGridLoad,
+  DOD_RANGE,
+  modelsForTech,
   OffGridLoadInput,
   PhaseSystem,
   validateOffGridInput,
 } from '../utils/offGridLoad';
-import {
-  buildOffGridReportHtml,
-  describeBatteryBank,
-  describeDod,
-  describeTransformer,
-} from '../utils/offGridReport';
+import { buildOffGridReportHtml, describeDod, describeTransformer } from '../utils/offGridReport';
 
 const TIPS = {
   neutral:
@@ -32,7 +30,7 @@ const TIPS = {
   fu:
     'Fator de ocupação: fração da potência do inversor que pode trabalhar em regime contínuo. 80% deixa 20% de folga para picos, temperatura e partida de motores.',
   dod:
-    'Profundidade de descarga (Depth of Discharge): quanto da capacidade da bateria pode ser usado. Lítio LiFePO4 costuma ir a 80%; chumbo-ácido / gel, a cerca de 50%. Desligado, o cálculo usa 100% da capacidade nominal.',
+    'Profundidade de descarga: parcela da capacidade que pode ser usada. Lítio LiFePO4 fica entre 70% e 90% (padrão 80%). Estacionária fica entre 30% e 60% (padrão 50%). Desligado, o cálculo usa 100% da capacidade nominal.',
 } as const;
 
 const FU_STEPS = [0.6, 0.7, 0.8, 0.9] as const;
@@ -56,12 +54,15 @@ export function LevantamentoScreen() {
   const [utilization, setUtilization] = useState(0.8);
   const [supportsMono220, setSupportsMono220] = useState(true);
   const [supportsNativeBiphasic, setSupportsNativeBiphasic] = useState(false);
+  const [inverterBus, setInverterBus] = useState<BusVoltageV>(48);
   const [busVoltage, setBusVoltage] = useState<BusVoltageV>(48);
+  const [busTouched, setBusTouched] = useState(false);
   const [autonomyText, setAutonomyText] = useState('12');
   const [autonomyUnit, setAutonomyUnit] = useState<AutonomyUnit>('hours');
   const [useDod, setUseDod] = useState(true);
   const [dodText, setDodText] = useState('80');
-  const [batteryTech, setBatteryTech] = useState<BatteryTech>('lithium');
+  const [batteryModelId, setBatteryModelId] = useState<BatteryModelId>('li-48-100');
+  const [showAlternative, setShowAlternative] = useState(false);
   const [efficiencyText, setEfficiencyText] = useState('92');
   const [exporting, setExporting] = useState(false);
 
@@ -90,14 +91,14 @@ export function LevantamentoScreen() {
       autonomyHours,
       useDod,
       dod: Number.isFinite(dodPct) ? dodPct / 100 : NaN,
-      batteryTech,
+      batteryModelId,
       inverterEfficiency: Number.isFinite(efficiencyPct) ? efficiencyPct / 100 : NaN,
     };
     return input;
   }, [
     autonomyText,
     autonomyUnit,
-    batteryTech,
+    batteryModelId,
     busVoltage,
     currentAText,
     currentBText,
@@ -117,9 +118,23 @@ export function LevantamentoScreen() {
   const validationError = validateOffGridInput(draft);
   const result = validationError ? null : calculateOffGridLoad(draft);
 
+  const batteryTech: BatteryTech = batteryModelId.startsWith('li-') ? 'lithium' : 'stationary';
+  const dodRange = DOD_RANGE[batteryTech];
+
+  const onInverterBus = (value: BusVoltageV) => {
+    setInverterBus(value);
+    if (!busTouched) setBusVoltage(value);
+  };
+
+  const onBankBus = (value: BusVoltageV) => {
+    setBusTouched(true);
+    setBusVoltage(value);
+  };
+
   const onTech = (tech: BatteryTech) => {
-    setBatteryTech(tech);
-    setDodText(tech === 'lithium' ? '80' : '50');
+    const next = modelsForTech(tech)[0];
+    setBatteryModelId(next.id);
+    setDodText(String(Math.round(DOD_RANGE[tech].default * 100)));
     setUseDod(true);
   };
 
@@ -240,17 +255,49 @@ export function LevantamentoScreen() {
           checked={supportsNativeBiphasic}
           onPress={() => setSupportsNativeBiphasic((value) => !value)}
         />
+        <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>
+          Barramento CC do inversor
+        </Text>
+        <Segment
+          options={[
+            { key: '24', label: '24 V' },
+            { key: '48', label: '48 V' },
+          ]}
+          value={String(inverterBus)}
+          onChange={(key) => onInverterBus(key === '24' ? 24 : 48)}
+        />
       </Section>
 
-      <Section title="C · Banco de baterias" hint="Autonomia, barramento e profundidade de descarga.">
-        <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>Tensão do barramento CC</Text>
+      <Section title="C · Banco de baterias" hint="Modelo de estoque, autonomia e profundidade de descarga.">
+        <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>Tecnologia</Text>
+        <Segment
+          options={[
+            { key: 'lithium', label: 'Lítio' },
+            { key: 'stationary', label: 'Estacionária' },
+          ]}
+          value={batteryTech}
+          onChange={onTech}
+        />
+        <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>Modelo base</Text>
+        <Segment
+          options={modelsForTech(batteryTech).map((model) => ({
+            key: model.id,
+            label: model.shortLabel,
+          }))}
+          value={batteryModelId}
+          onChange={setBatteryModelId}
+        />
+        <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>
+          Barramento CC do banco
+          {busVoltage === inverterBus ? ' · acompanha o inversor' : ' · ajuste manual'}
+        </Text>
         <Segment
           options={[
             { key: '24', label: '24 V' },
             { key: '48', label: '48 V' },
           ]}
           value={String(busVoltage)}
-          onChange={(key) => setBusVoltage(key === '24' ? 24 : 48)}
+          onChange={(key) => onBankBus(key === '24' ? 24 : 48)}
         />
         <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>Autonomia desejada</Text>
         <Segment
@@ -268,34 +315,39 @@ export function LevantamentoScreen() {
           keyboardType="decimal-pad"
           placeholder={autonomyUnit === 'days' ? '1' : '12'}
         />
-        <FieldLabel label="Considerar DoD" tip={TIPS.dod} />
+        <FieldLabel label="Profundidade de descarga" tip={TIPS.dod} />
         <Segment
           options={[
-            { key: 'yes', label: 'Sim' },
-            { key: 'no', label: 'Não' },
+            { key: 'yes', label: 'Considerar DoD' },
+            { key: 'no', label: 'Ignorar DoD' },
           ]}
           value={useDod ? 'yes' : 'no'}
           onChange={(key) => setUseDod(key === 'yes')}
         />
         {useDod ? (
-          <InputField
-            label="Profundidade de descarga (%)"
-            value={dodText}
-            onChangeText={setDodText}
-            keyboardType="decimal-pad"
-            placeholder="80"
-            hint="LiFePO4 típico 80%. Chumbo-ácido / gel típico 50%."
-          />
+          <>
+            <Segment
+              options={dodSteps(batteryTech).map((step) => ({
+                key: String(step),
+                label: `${step}%`,
+              }))}
+              value={dodText}
+              onChange={setDodText}
+            />
+            <InputField
+              label="DoD manual (%)"
+              value={dodText}
+              onChangeText={setDodText}
+              keyboardType="decimal-pad"
+              placeholder={String(Math.round(dodRange.default * 100))}
+              hint={
+                batteryTech === 'lithium'
+                  ? 'Lítio: ajuste entre 70% e 90%. Padrão 80%.'
+                  : 'Estacionária: ajuste entre 30% e 60%. Padrão 50%.'
+              }
+            />
+          </>
         ) : null}
-        <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>Tecnologia da bateria</Text>
-        <Segment
-          options={[
-            { key: 'lithium', label: 'Lítio' },
-            { key: 'lead', label: 'Chumbo' },
-          ]}
-          value={batteryTech}
-          onChange={onTech}
-        />
         <InputField
           label="Eficiência do inversor (%)"
           value={efficiencyText}
@@ -396,35 +448,65 @@ export function LevantamentoScreen() {
           />
           <Text style={[styles.note, { color: colors.textSecondary }]}>{describeTransformer(result)}</Text>
 
-          <ResultCard
-            title="Banco de baterias"
-            rows={[
-              {
-                label: 'Capacidade total',
-                value: `${formatNumber(result.batteryGrossWh / 1000)} kWh`,
-                emphasize: true,
-              },
-              {
-                label: 'Capacidade no barramento',
-                value: `${formatNumber(result.capacityAh, 0)} Ah @ ${draft.busVoltageV} V`,
-              },
-              {
-                label: 'Critério',
-                value: describeDod(result),
-              },
-              {
-                label: 'Módulos sugeridos',
-                value:
-                  draft.batteryTech === 'lithium'
-                    ? `${result.lithiumModules}× lítio 48 V 100 Ah`
-                    : `${result.leadTotal}× chumbo 12 V 220 Ah`,
-                emphasize: true,
-              },
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow },
             ]}
-          />
-          <Text style={[styles.note, { color: colors.textSecondary }]}>
-            {describeBatteryBank(draft, result)}
-          </Text>
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Banco de baterias</Text>
+            <Text style={[styles.headline, { color: colors.accent }]}>{result.bank.headline}</Text>
+            <Text style={[styles.wiring, { color: colors.textSecondary }]}>{result.bank.wiring}</Text>
+            {result.bank.compatible ? (
+              <>
+                <Metric
+                  label="Capacidade útil entregue"
+                  value={`${formatNumber(result.bank.installedUsefulWh / 1000)} kWh`}
+                  emphasize
+                />
+                <Metric
+                  label="Capacidade bruta do banco"
+                  value={`${formatNumber(result.bank.installedGrossWh / 1000)} kWh`}
+                />
+                <Metric label="DoD" value={describeDod(result)} />
+                <Metric
+                  label="Energia pedida"
+                  value={`${formatNumber(result.energyWh / 1000)} kWh úteis · ${formatNumber(result.batteryGrossWh / 1000)} kWh brutos`}
+                />
+              </>
+            ) : (
+              <Banner tone="warning" text={result.bank.wiring} />
+            )}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setShowAlternative((value) => !value)}
+              style={[styles.altToggle, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.altToggleText, { color: colors.primary }]}>
+                {showAlternative
+                  ? 'Ocultar opção alternativa'
+                  : 'Ver opção alternativa (lítio vs estacionária)'}
+              </Text>
+            </Pressable>
+            {showAlternative ? (
+              <View style={styles.compareRow}>
+                <CompareCard
+                  title="Opção A · Lítio"
+                  headline={result.comparison.lithium.headline}
+                  detail={`${formatNumber(result.comparison.lithium.installedGrossWh / 1000)} kWh brutos · ~${result.comparison.lithium.model.cycles} ciclos`}
+                  note="Peso menor"
+                  selected={batteryTech === 'lithium'}
+                />
+                <CompareCard
+                  title="Opção B · Estacionária"
+                  headline={result.comparison.stationary.headline}
+                  detail={`${formatNumber(result.comparison.stationary.installedGrossWh / 1000)} kWh brutos · ~${result.comparison.stationary.model.cycles} ciclos`}
+                  note="Maior ocupação de espaço"
+                  selected={batteryTech === 'stationary'}
+                />
+              </View>
+            ) : null}
+          </View>
 
           <PrimaryButton
             label="Gerar relatório técnico em PDF"
@@ -435,6 +517,42 @@ export function LevantamentoScreen() {
         </>
       ) : null}
     </ScreenContainer>
+  );
+}
+
+function dodSteps(tech: BatteryTech): number[] {
+  return tech === 'lithium' ? [70, 75, 80, 85, 90] : [30, 40, 50, 60];
+}
+
+function CompareCard({
+  title,
+  headline,
+  detail,
+  note,
+  selected,
+}: {
+  title: string;
+  headline: string;
+  detail: string;
+  note: string;
+  selected: boolean;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={[
+        styles.compareCard,
+        {
+          backgroundColor: selected ? colors.primarySoft : colors.inputBg,
+          borderColor: selected ? colors.primary : colors.border,
+        },
+      ]}
+    >
+      <Text style={[styles.compareTitle, { color: colors.textSecondary }]}>{title}</Text>
+      <Text style={[styles.compareHeadline, { color: colors.text }]}>{headline}</Text>
+      <Text style={[styles.compareDetail, { color: colors.textSecondary }]}>{detail}</Text>
+      <Text style={[styles.compareDetail, { color: colors.text }]}>{note}</Text>
+    </View>
   );
 }
 
@@ -682,6 +800,58 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: -8,
     marginBottom: 16,
+  },
+  wiring: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  headline: {
+    fontFamily: 'Outfit_700Bold',
+    fontSize: 22,
+    lineHeight: 28,
+    marginTop: 8,
+  },
+  altToggle: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginTop: 14,
+    alignItems: 'center',
+  },
+  altToggleText: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  compareRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  compareCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 10,
+  },
+  compareTitle: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  compareHeadline: {
+    fontFamily: 'Outfit_600SemiBold',
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  compareDetail: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 6,
   },
   exportBtn: { marginBottom: 12 },
 });

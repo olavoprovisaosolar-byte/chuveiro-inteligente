@@ -1,6 +1,6 @@
 {
   "name": "solar-calculator",
-  "version": "1.0.25",
+  "version": "1.0.26",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
