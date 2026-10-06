@@ -7,11 +7,11 @@ import { FieldLabel } from '../components/InfoTip';
 import { InputField } from '../components/InputField';
 import { LoadShareChart } from '../components/LoadShareChart';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { ResultCard } from '../components/ResultCard';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useTheme } from '../theme/ThemeContext';
 import { formatNumber, parseLocaleNumber } from '../utils/calculations';
 import {
+  AcOutputTopology,
   BatteryModelId,
   BatteryTech,
   BusVoltageV,
@@ -22,16 +22,14 @@ import {
   PhaseSystem,
   validateOffGridInput,
 } from '../utils/offGridLoad';
-import { buildOffGridReportHtml, describeDod, describeTransformer } from '../utils/offGridReport';
-
-const TIPS = {
-  neutral:
-    'Corrente no condutor neutro, lida com o alicate. Ela indica a parcela das cargas ligadas entre fase e neutro (127 V ou 110 V). Se o neutro estiver quase zerado, a carga é praticamente toda em 220 V.',
-  fu:
-    'Fator de ocupação: fração da potência do inversor que pode trabalhar em regime contínuo. 80% deixa 20% de folga para picos, temperatura e partida de motores.',
-  dod:
-    'Profundidade de descarga: parcela da capacidade que pode ser usada. Lítio LiFePO4 fica entre 70% e 90% (padrão 80%). Estacionária fica entre 30% e 60% (padrão 50%). Desligado, o cálculo usa 100% da capacidade nominal.',
-} as const;
+import {
+  acOutputTag,
+  buildOffGridReportHtml,
+  describeAssembly,
+  describeTransformer,
+  dodConsideredLabel,
+  FIELD_HELP,
+} from '../utils/offGridReport';
 
 const FU_STEPS = [0.6, 0.7, 0.8, 0.9] as const;
 
@@ -52,8 +50,7 @@ export function LevantamentoScreen() {
   const [currentCText, setCurrentCText] = useState('');
   const [currentNeutralText, setCurrentNeutralText] = useState('');
   const [utilization, setUtilization] = useState(0.8);
-  const [supportsMono220, setSupportsMono220] = useState(true);
-  const [supportsNativeBiphasic, setSupportsNativeBiphasic] = useState(false);
+  const [acOutput, setAcOutput] = useState<AcOutputTopology>('mono220');
   const [inverterBus, setInverterBus] = useState<BusVoltageV>(48);
   const [busVoltage, setBusVoltage] = useState<BusVoltageV>(48);
   const [busTouched, setBusTouched] = useState(false);
@@ -85,8 +82,7 @@ export function LevantamentoScreen() {
       currentC: parseNonNegative(currentCText),
       currentNeutral: parseNonNegative(currentNeutralText),
       utilizationFactor: utilization,
-      supportsMono220,
-      supportsNativeBiphasic,
+      acOutput,
       busVoltageV: busVoltage,
       autonomyHours,
       useDod,
@@ -106,8 +102,7 @@ export function LevantamentoScreen() {
     currentNeutralText,
     dodText,
     efficiencyText,
-    supportsMono220,
-    supportsNativeBiphasic,
+    acOutput,
     system,
     useDod,
     utilization,
@@ -166,7 +161,10 @@ export function LevantamentoScreen() {
       title="Levantamento"
       subtitle="Medição com alicate e dimensionamento off-grid / retrofit."
     >
-      <Section title="A · Medição de campo" hint="Correntes lidas no alicate amperímetro.">
+      <Section
+        title="1. Dados do Quadro de Medição (Leituras de Campo)"
+        hint="Correntes lidas com o alicate amperímetro em cada condutor do quadro."
+      >
         <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>Tipo de sistema</Text>
         <Segment
           options={[
@@ -200,6 +198,7 @@ export function LevantamentoScreen() {
           <View style={styles.pairItem}>
             <InputField
               label="Corrente fase A (A)"
+              icon="flash-outline"
               value={currentAText}
               onChangeText={setCurrentAText}
               keyboardType="decimal-pad"
@@ -209,6 +208,7 @@ export function LevantamentoScreen() {
           <View style={styles.pairItem}>
             <InputField
               label="Corrente fase B (A)"
+              icon="flash-outline"
               value={currentBText}
               onChangeText={setCurrentBText}
               keyboardType="decimal-pad"
@@ -219,6 +219,7 @@ export function LevantamentoScreen() {
         {system === 'triphasic' ? (
           <InputField
             label="Corrente fase C (A)"
+            icon="flash-outline"
             value={currentCText}
             onChangeText={setCurrentCText}
             keyboardType="decimal-pad"
@@ -227,7 +228,10 @@ export function LevantamentoScreen() {
         ) : null}
         <InputField
           label="Corrente no neutro (A)"
-          tip={TIPS.neutral}
+          icon="ellipse"
+          highlight
+          tip={FIELD_HELP.neutral}
+          hint={FIELD_HELP.neutral}
           value={currentNeutralText}
           onChangeText={setCurrentNeutralText}
           keyboardType="decimal-pad"
@@ -235,8 +239,29 @@ export function LevantamentoScreen() {
         />
       </Section>
 
-      <Section title="B · Inversor off-grid" hint="Folga de regime contínuo e tipo de saída.">
-        <FieldLabel label="Fator de ocupação" tip={TIPS.fu} />
+      <Section
+        title="Especificação da Saída AC do Inversor (Alimentação da Casa)"
+        hint={FIELD_HELP.inverterIntro}
+      >
+        <ChoiceCard
+          selected={acOutput === 'mono220'}
+          title="220V Monofásico (Fase + Neutro)"
+          body={FIELD_HELP.mono220}
+          onPress={() => setAcOutput('mono220')}
+        />
+        <ChoiceCard
+          selected={acOutput === 'split_phase'}
+          title="Bifásico Nativo / Split-Phase (Fase A + Fase B + Neutro)"
+          body={FIELD_HELP.splitPhase}
+          onPress={() => setAcOutput('split_phase')}
+        />
+        <ChoiceCard
+          selected={acOutput === 'triphasic'}
+          title="Trifásico Nativo (3 Fases + Neutro)"
+          body={FIELD_HELP.triphasic}
+          onPress={() => setAcOutput('triphasic')}
+        />
+        <FieldLabel label="Fator de ocupação" tip={FIELD_HELP.utilization} />
         <Segment
           options={FU_STEPS.map((step) => ({
             key: String(step),
@@ -244,16 +269,6 @@ export function LevantamentoScreen() {
           }))}
           value={String(utilization)}
           onChange={(key) => setUtilization(Number(key))}
-        />
-        <CheckRow
-          label="Saída 220 V monofásica"
-          checked={supportsMono220}
-          onPress={() => setSupportsMono220((value) => !value)}
-        />
-        <CheckRow
-          label="Saída bifásica nativa"
-          checked={supportsNativeBiphasic}
-          onPress={() => setSupportsNativeBiphasic((value) => !value)}
         />
         <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>
           Barramento CC do inversor
@@ -268,15 +283,24 @@ export function LevantamentoScreen() {
         />
       </Section>
 
-      <Section title="C · Banco de baterias" hint="Modelo de estoque, autonomia e profundidade de descarga.">
+      <Section
+        title="3. Especificação do Banco de Baterias (Estoque)"
+        hint="Escolha a tecnologia e o modelo que será instalado no cliente."
+      >
         <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>Tecnologia</Text>
-        <Segment
-          options={[
-            { key: 'lithium', label: 'Lítio' },
-            { key: 'stationary', label: 'Estacionária' },
-          ]}
-          value={batteryTech}
-          onChange={onTech}
+        <ChoiceCard
+          selected={batteryTech === 'lithium'}
+          title="Lítio (LiFePO4)"
+          badge={FIELD_HELP.lithiumBadge}
+          badgeTone="green"
+          onPress={() => onTech('lithium')}
+        />
+        <ChoiceCard
+          selected={batteryTech === 'stationary'}
+          title="Estacionária (Chumbo-Ácido)"
+          badge={FIELD_HELP.stationaryBadge}
+          badgeTone="slate"
+          onPress={() => onTech('stationary')}
         />
         <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>Modelo base</Text>
         <Segment
@@ -315,7 +339,14 @@ export function LevantamentoScreen() {
           keyboardType="decimal-pad"
           placeholder={autonomyUnit === 'days' ? '1' : '12'}
         />
-        <FieldLabel label="Profundidade de descarga" tip={TIPS.dod} />
+        <FieldLabel label="Profundidade de descarga" tip={FIELD_HELP.dod} />
+        <Text style={[styles.dodLabel, { color: colors.primary, backgroundColor: colors.primarySoft }]}>
+          {dodConsideredLabel(
+            batteryTech,
+            Number.isFinite(parseLocaleNumber(dodText)) ? parseLocaleNumber(dodText) : dodRange.default * 100,
+            useDod,
+          )}
+        </Text>
         <Segment
           options={[
             { key: 'yes', label: 'Considerar DoD' },
@@ -397,24 +428,28 @@ export function LevantamentoScreen() {
             ) : null}
           </View>
 
-          <ResultCard
-            title="Inversor off-grid"
-            rows={[
-              {
-                label: 'Potência mínima calculada',
-                value: `${formatNumber(result.inverterMinW / 1000)} kW`,
-              },
-              {
-                label: 'Potência nominal recomendada',
-                value: `${formatNumber(result.inverterSuggestedKw)} kW`,
-                emphasize: true,
-              },
-              {
-                label: 'Fator de ocupação aplicado',
-                value: `${formatNumber(result.utilizationFactor * 100, 0)}%`,
-              },
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow },
             ]}
-          />
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Inversor recomendado</Text>
+            <Text style={[styles.headline, { color: colors.accent }]}>
+              Inversor Recomendado: {formatNumber(result.inverterSuggestedKw)} kW
+            </Text>
+            <View style={[styles.tag, { backgroundColor: colors.primarySoft }]}>
+              <Text style={[styles.tagText, { color: colors.primary }]}>{acOutputTag(acOutput)}</Text>
+            </View>
+            <Metric
+              label="Potência mínima calculada"
+              value={`${formatNumber(result.inverterMinW / 1000)} kW`}
+            />
+            <Metric
+              label="Fator de ocupação aplicado"
+              value={`${formatNumber(result.utilizationFactor * 100, 0)}%`}
+            />
+          </View>
           <Banner
             tone={result.surgeMarginTight ? 'warning' : 'info'}
             text={
@@ -424,29 +459,23 @@ export function LevantamentoScreen() {
             }
           />
 
-          <ResultCard
-            title="Autotransformador de apoio (127 V)"
-            rows={[
-              {
-                label: 'Situação',
-                value:
-                  result.transformerStatus === 'required'
-                    ? `${formatNumber(result.transformerSuggestedKva)} kVA`
-                    : result.transformerStatus === 'native_biphasic'
-                      ? 'Não necessário'
-                      : 'Sem carga 127 V',
-                emphasize: result.transformerStatus === 'required',
-              },
-              {
-                label: 'Potência calculada (30% de folga)',
-                value:
-                  result.transformerStatus === 'required'
-                    ? `${formatNumber(result.transformerW / 1000)} kVA`
-                    : '—',
-              },
-            ]}
-          />
-          <Text style={[styles.note, { color: colors.textSecondary }]}>{describeTransformer(result)}</Text>
+          {result.transformerStatus === 'required' ? (
+            <View style={[styles.alertCard, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Autotransformador de Apoio Necessário</Text>
+              <Text style={[styles.alertDetail, { color: colors.text }]}>{describeTransformer(result)}</Text>
+              <Text style={[styles.wiring, { color: colors.textSecondary }]}>{FIELD_HELP.mono220}</Text>
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow },
+              ]}
+            >
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Autotransformador de apoio</Text>
+              <Text style={[styles.wiring, { color: colors.textSecondary }]}>{describeTransformer(result)}</Text>
+            </View>
+          )}
 
           <View
             style={[
@@ -456,6 +485,7 @@ export function LevantamentoScreen() {
           >
             <Text style={[styles.cardTitle, { color: colors.text }]}>Banco de baterias</Text>
             <Text style={[styles.headline, { color: colors.accent }]}>{result.bank.headline}</Text>
+            <Text style={[styles.assembly, { color: colors.text }]}>{describeAssembly(result)}</Text>
             <Text style={[styles.wiring, { color: colors.textSecondary }]}>{result.bank.wiring}</Text>
             {result.bank.compatible ? (
               <>
@@ -468,7 +498,16 @@ export function LevantamentoScreen() {
                   label="Capacidade bruta do banco"
                   value={`${formatNumber(result.bank.installedGrossWh / 1000)} kWh`}
                 />
-                <Metric label="DoD" value={describeDod(result)} />
+                <Metric
+                  label="DoD"
+                  value={dodConsideredLabel(
+                    batteryTech,
+                    Number.isFinite(parseLocaleNumber(dodText))
+                      ? parseLocaleNumber(dodText)
+                      : dodRange.default * 100,
+                    useDod,
+                  )}
+                />
                 <Metric
                   label="Energia pedida"
                   value={`${formatNumber(result.energyWh / 1000)} kWh úteis · ${formatNumber(result.batteryGrossWh / 1000)} kWh brutos`}
@@ -556,6 +595,46 @@ function CompareCard({
   );
 }
 
+function ChoiceCard({
+  title,
+  body,
+  badge,
+  badgeTone = 'green',
+  selected,
+  onPress,
+}: {
+  title: string;
+  body?: string;
+  badge?: string;
+  badgeTone?: 'green' | 'slate';
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  const badgeBg = badgeTone === 'green' ? colors.primarySoft : colors.backgroundAlt;
+  const badgeFg = badgeTone === 'green' ? colors.primary : colors.textSecondary;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={[
+        styles.choice,
+        {
+          backgroundColor: selected ? colors.primarySoft : colors.surface,
+          borderColor: selected ? colors.primary : colors.border,
+        },
+      ]}
+    >
+      <Text style={[styles.choiceTitle, { color: colors.text }]}>{title}</Text>
+      {badge ? (
+        <Text style={[styles.badge, { backgroundColor: badgeBg, color: badgeFg }]}>{badge}</Text>
+      ) : null}
+      {body ? <Text style={[styles.choiceBody, { color: colors.textSecondary }]}>{body}</Text> : null}
+    </Pressable>
+  );
+}
+
 function Section({
   title,
   hint,
@@ -622,33 +701,6 @@ function Segment<T extends string>({
   );
 }
 
-function CheckRow({
-  label,
-  checked,
-  onPress,
-}: {
-  label: string;
-  checked: boolean;
-  onPress: () => void;
-}) {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked }}
-      onPress={onPress}
-      style={styles.checkRow}
-    >
-      <Ionicons
-        name={checked ? 'checkbox' : 'square-outline'}
-        size={22}
-        color={checked ? colors.primary : colors.textMuted}
-      />
-      <Text style={[styles.checkLabel, { color: colors.text }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 function Metric({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
   const { colors } = useTheme();
   return (
@@ -687,7 +739,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontFamily: 'Outfit_700Bold',
-    fontSize: 17,
+    fontSize: 16,
+    lineHeight: 22,
   },
   sectionHint: {
     fontFamily: 'DMSans_400Regular',
@@ -728,17 +781,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
   },
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 12,
-  },
-  checkLabel: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 15,
-    flex: 1,
-  },
   pending: {
     fontFamily: 'DMSans_400Regular',
     fontSize: 14,
@@ -759,6 +801,72 @@ const styles = StyleSheet.create({
     fontFamily: 'Outfit_700Bold',
     fontSize: 17,
     marginBottom: 4,
+  },
+  choice: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  choiceTitle: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  choiceBody: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 8,
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 11,
+  },
+  dodLabel: {
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 12,
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 13,
+  },
+  tag: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 10,
+  },
+  tagText: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 12,
+  },
+  alertCard: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+  },
+  alertDetail: {
+    fontFamily: 'Outfit_600SemiBold',
+    fontSize: 16,
+    lineHeight: 22,
+    marginTop: 8,
+  },
+  assembly: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: 8,
   },
   metric: {
     borderTopWidth: StyleSheet.hairlineWidth,

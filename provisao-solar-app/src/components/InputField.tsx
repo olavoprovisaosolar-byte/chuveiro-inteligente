@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
@@ -8,21 +9,36 @@ type Props = TextInputProps & {
   hint?: string;
   error?: string;
   tip?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** Destaca o campo (usado no condutor neutro). */
+  highlight?: boolean;
 };
 
-export function InputField({ label, hint, error, tip, style, ...rest }: Props) {
+export function InputField({ label, hint, error, tip, icon, highlight, style, ...rest }: Props) {
   const { colors } = useTheme();
 
   return (
     <View style={styles.wrap}>
-      <FieldLabel label={label} tip={tip} />
+      <View style={styles.labelRow}>
+        {icon ? (
+          <Ionicons
+            name={icon}
+            size={18}
+            color={highlight ? colors.accent : colors.primary}
+            style={styles.icon}
+          />
+        ) : null}
+        <View style={styles.labelFlex}>
+          <FieldLabel label={label} tip={tip} />
+        </View>
+      </View>
       <TextInput
         placeholderTextColor={colors.textMuted}
         style={[
           styles.input,
           {
-            backgroundColor: colors.inputBg,
-            borderColor: error ? colors.danger : colors.border,
+            backgroundColor: highlight ? colors.accentSoft : colors.inputBg,
+            borderColor: error ? colors.danger : highlight ? colors.accent : colors.border,
             color: colors.text,
           },
           style,
@@ -39,6 +55,13 @@ export function InputField({ label, hint, error, tip, style, ...rest }: Props) {
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 14 },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  labelFlex: { flex: 1 },
+  icon: { marginTop: 1 },
   input: {
     borderWidth: 1,
     borderRadius: 14,

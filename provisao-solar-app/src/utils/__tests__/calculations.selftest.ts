@@ -13,7 +13,7 @@ import {
 } from '../calculations';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
-import { buildOffGridReportHtml } from '../offGridReport';
+import { buildOffGridReportHtml, FIELD_HELP } from '../offGridReport';
 import {
   calculateOffGridLoad,
   nextCommercialSize,
@@ -213,8 +213,7 @@ const offGridBase: OffGridLoadInput = {
   currentC: 40,
   currentNeutral: 8,
   utilizationFactor: 0.8,
-  supportsMono220: true,
-  supportsNativeBiphasic: false,
+  acOutput: 'mono220',
   busVoltageV: 48,
   autonomyHours: 12,
   useDod: true,
@@ -332,6 +331,15 @@ assert(validateOffGridInput({ ...offGridBase, currentA: 0, currentB: 0 }) !== nu
 const report = buildOffGridReportHtml(offGridBase, offGrid);
 assert(report.includes('8 kW') || report.includes('8kW'), 'Relatório cita o inversor sugerido');
 assert(report.includes('16x Módulos de Lítio 48V 100Ah'), 'Relatório cita o arranjo de lítio');
+assert(report.includes('Inversor Recomendado'), 'Relatório nomeia o inversor recomendado');
+assert(report.includes('Montagem:'), 'Relatório traz o guia de montagem');
+assert(report.includes(FIELD_HELP.neutral), 'Relatório inclui a explicação do neutro');
+assert(report.includes(FIELD_HELP.mono220), 'Relatório inclui a ajuda da saída 220V');
+const split = calculateOffGridLoad({ ...offGridBase, acOutput: 'split_phase' });
+assert(split.transformerStatus === 'split_phase', 'Bifásico nativo dispensa autotransformador');
+assert(split.transformerSuggestedKva === 0, 'Sem kVA de trafo na saída bifásica');
+const triOut = calculateOffGridLoad({ ...offGridBase, acOutput: 'triphasic' });
+assert(triOut.transformerStatus === 'triphasic', 'Trifásico nativo dispensa autotransformador');
 console.log(
   `   Off-grid 20+15 A / neutro 8 A: ${offGrid.inverterSuggestedKw} kW · ${offGrid.bank.headline}`,
 );

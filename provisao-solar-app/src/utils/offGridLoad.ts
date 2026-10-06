@@ -7,7 +7,9 @@ export type PhaseSystem = 'biphasic' | 'triphasic';
 export type BatteryTech = 'lithium' | 'stationary';
 export type BatteryModelId = 'li-48-100' | 'li-24-100' | 'st-12-240' | 'st-12-150';
 export type BusVoltageV = 24 | 48;
-export type TransformerStatus = 'required' | 'native_biphasic' | 'no_127_load';
+/** Topologia da saída AC que alimenta o quadro da casa. */
+export type AcOutputTopology = 'mono220' | 'split_phase' | 'triphasic';
+export type TransformerStatus = 'required' | 'split_phase' | 'triphasic' | 'no_127_load';
 
 /** Portes comerciais de inversor off-grid (kW), do menor para o maior. */
 export const COMMERCIAL_INVERTER_KW = [3, 5, 8, 10, 12, 15, 20, 25, 30, 40, 50] as const;
@@ -122,8 +124,7 @@ export type OffGridLoadInput = {
   currentNeutral: number;
   /** 0,60 a 0,90. */
   utilizationFactor: number;
-  supportsMono220: boolean;
-  supportsNativeBiphasic: boolean;
+  acOutput: AcOutputTopology;
   busVoltageV: BusVoltageV;
   autonomyHours: number;
   useDod: boolean;
@@ -311,7 +312,8 @@ export function calculateOffGridLoad(input: OffGridLoadInput): OffGridLoadResult
   const transformerW = power127W / TRAFO_LOAD_FACTOR;
   let transformerStatus: TransformerStatus = 'required';
   if (power127W <= 1e-6) transformerStatus = 'no_127_load';
-  else if (input.supportsNativeBiphasic) transformerStatus = 'native_biphasic';
+  else if (input.acOutput === 'split_phase') transformerStatus = 'split_phase';
+  else if (input.acOutput === 'triphasic') transformerStatus = 'triphasic';
   const transformerSuggestedKva =
     transformerStatus === 'required'
       ? nextCommercialSize(transformerW / 1000, COMMERCIAL_TRAFO_KVA)
