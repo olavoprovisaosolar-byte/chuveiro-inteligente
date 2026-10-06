@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import React, { useMemo } from 'react';
-import { Platform, StyleSheet, useWindowDimensions } from 'react-native';
+import { Platform, StyleSheet, Text, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AreaTelhadoScreen } from '../screens/AreaTelhadoScreen';
 import { ConfigAiScreen } from '../screens/ConfigAiScreen';
 import { DimensionamentoScreen } from '../screens/DimensionamentoScreen';
 import { GuiaScreen } from '../screens/GuiaScreen';
+import { LevantamentoScreen } from '../screens/LevantamentoScreen';
 import { ModulosScreen } from '../screens/ModulosScreen';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -15,6 +16,7 @@ export type RootTabParamList = {
   Dimensionamento: undefined;
   Modulos: undefined;
   Area: undefined;
+  Carga: undefined;
   Guia: undefined;
   Config: undefined;
 };
@@ -74,19 +76,30 @@ export function AppNavigator() {
           },
           tabBarItemStyle: {
             paddingVertical: 2,
+            paddingHorizontal: 0,
+            marginHorizontal: 0,
             minHeight: contentHeight - 4,
           },
-          tabBarLabelStyle: {
-            fontFamily: 'DMSans_500Medium',
-            fontSize: isTablet ? 12 : isLandscape ? 10 : 11,
-            marginTop: 2,
-            marginBottom: 0,
-          },
+          tabBarLabel: ({ color, children }) => (
+            <Text
+              style={{
+                color,
+                fontFamily: 'DMSans_500Medium',
+                fontSize: isTablet ? 12 : width < 430 ? 10 : 11,
+                lineHeight: isTablet ? 16 : 13,
+                marginTop: 2,
+                textAlign: 'center',
+              }}
+            >
+              {children}
+            </Text>
+          ),
           tabBarIcon: ({ color, size }) => {
             const map: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> = {
               Dimensionamento: 'flash-outline',
               Modulos: 'grid-outline',
               Area: 'home-outline',
+              Carga: 'speedometer-outline',
               Guia: 'book-outline',
               Config: 'settings-outline',
             };
@@ -117,6 +130,11 @@ export function AppNavigator() {
           options={{ title: 'Telhado' }}
         />
         <Tab.Screen
+          name="Carga"
+          component={LevantamentoScreen}
+          options={{ title: 'Carga' }}
+        />
+        <Tab.Screen
           name="Guia"
           component={GuiaScreen}
           options={{ title: 'Guia' }}
@@ -124,7 +142,7 @@ export function AppNavigator() {
         <Tab.Screen
           name="Config"
           component={ConfigAiScreen}
-          options={{ title: 'Config. IA' }}
+          options={{ title: width < 430 ? 'Config' : 'Config. IA' }}
         />
       </Tab.Navigator>
     </NavigationContainer>

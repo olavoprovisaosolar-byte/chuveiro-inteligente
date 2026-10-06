@@ -13,6 +13,13 @@ import {
 } from '../calculations';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
+import { buildOffGridReportHtml, FIELD_HELP } from '../offGridReport';
+import {
+  calculateOffGridLoad,
+  nextCommercialSize,
+  validateOffGridInput,
+  type OffGridLoadInput,
+} from '../offGridLoad';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -195,4 +202,144 @@ console.log(
 );
 console.log(
   `   Layout 5×8 m / folga 0,1: máx ${fillStrip.options[0].panelCount} placas (${fillStrip.options[0].orientationSummary}) · base y=${stripMaxY}`,
+);
+
+const offGridBase: OffGridLoadInput = {
+  system: 'biphasic',
+  voltageFn: 127,
+  voltageFf: 220,
+  currentA: 20,
+  currentB: 15,
+  currentC: 40,
+  currentNeutral: 8,
+  utilizationFactor: 0.8,
+  acOutput: 'mono220',
+  busVoltageV: 48,
+  autonomyHours: 12,
+  useDod: true,
+  dod: 0.8,
+  batteryModelId: 'li-48-100',
+  inverterEfficiency: 0.92,
+};
+assert(validateOffGridInput(offGridBase) === null, 'Entrada off-grid de referência é válida');
+const offGrid = calculateOffGridLoad(offGridBase);
+assert(almostEqual(offGrid.power127W, 8 * 127), 'P127 = Ineutro × Vfn');
+assert(almostEqual(offGrid.powerTotalW, (20 + 15) * 127), 'Ptotal bifásico ignora fase C');
+assert(almostEqual(offGrid.power220W, offGrid.powerTotalW - offGrid.power127W), 'P220 = Ptotal − P127');
+assert(almostEqual(offGrid.currentInverterA, offGrid.powerTotalW / 220), 'I220 = Ptotal / Vff');
+assert(almostEqual(offGrid.inverterMinW, offGrid.powerTotalW / 0.8), 'Pinv = Ptotal / FU');
+assert(offGrid.inverterSuggestedKw === 8, `Inversor comercial esperado 8 kW, veio ${offGrid.inverterSuggestedKw}`);
+assert(almostEqual(offGrid.transformerW, offGrid.power127W / 0.7), 'Trafo com 30% de folga');
+assert(offGrid.transformerSuggestedKva === 1.5, `Trafo comercial esperado 1,5 kVA, veio ${offGrid.transformerSuggestedKva}`);
+const energyWh = (offGrid.powerTotalW * 12) / 0.92;
+assert(almostEqual(offGrid.energyWh, energyWh, 0.02), 'Energia Wh com eficiência');
+assert(almostEqual(offGrid.batteryGrossWh, energyWh / 0.8, 0.05), 'Banco corrige DoD');
+assert(almostEqual(offGrid.capacityAh, energyWh / 0.8 / 48, 0.05), 'Ah no barramento 48 V');
+assert(offGrid.bank.model.energyWh === 4800, 'Módulo lítio 48 V 100 Ah = 4,8 kWh');
+assert(offGrid.bank.series === 1, 'Lítio 48 V no barramento 48 V fica em paralelo');
+assert(offGrid.bank.parallel === 16, `Módulos lítio esperados 16, veio ${offGrid.bank.parallel}`);
+assert(offGrid.bank.total === 16, 'Total de módulos = ramos em paralelo');
+assert(offGrid.bank.branchWh === 4800, 'Ramo de um módulo 48 V = 4800 Wh');
+assert(
+  almostEqual(offGrid.bank.installedGrossWh, 16 * 4800, 0.1),
+  'Capacidade bruta instalada',
+);
+assert(
+  almostEqual(offGrid.bank.installedUsefulWh, 16 * 4800 * 0.8, 0.1),
+  'Capacidade útil entregue com DoD 80%',
+);
+assert(offGrid.dodApplied === 0.8, 'DoD aplicado 80%');
+assert(offGrid.bank.headline.startsWith('16x Módulos de Lítio 48V 100Ah'), offGrid.bank.headline);
+
+const noDod = calculateOffGridLoad({ ...offGridBase, useDod: false });
+assert(almostEqual(noDod.batteryGrossWh, energyWh, 0.02), 'Sem DoD a capacidade bruta é a energia útil');
+assert(noDod.dodApplied === null, 'DoD ignorado');
+
+const tri = calculateOffGridLoad({ ...offGridBase, system: 'triphasic' });
+assert(almostEqual(tri.powerTotalW, (20 + 15 + 40) * 127), 'Ptotal trifásico soma fase C');
+
+const stationary48 = calculateOffGridLoad({
+  ...offGridBase,
+  batteryModelId: 'st-12-240',
+  busVoltageV: 48,
+});
+assert(stationary48.bank.model.energyWh === 2880, 'Estacionária 12 V 240 Ah = 2,88 kWh');
+assert(stationary48.bank.series === 4, '48 V pede 4 baterias de 12 V em série');
+assert(stationary48.bank.branchWh === 12 * 4 * 240, 'Ramo 48 V = 12 V × 4 × 240 Ah');
+assert(
+  stationary48.bank.parallel === Math.ceil((energyWh / 0.8) / stationary48.bank.branchWh - 1e-9),
+  'Ramos em paralelo arredondam para cima',
+);
+assert(
+  stationary48.bank.total === stationary48.bank.series * stationary48.bank.parallel,
+  'Total = série × paralelo',
+);
+assert(stationary48.bank.wiring.includes('SÉRIE'), stationary48.bank.wiring);
+assert(stationary48.bank.wiring.includes('PARALELO'), stationary48.bank.wiring);
+
+const stationary24 = calculateOffGridLoad({
+  ...offGridBase,
+  batteryModelId: 'st-12-150',
+  busVoltageV: 24,
+  useDod: false,
+});
+assert(stationary24.bank.model.energyWh === 1800, 'Estacionária 12 V 150 Ah = 1,8 kWh');
+assert(stationary24.bank.series === 2, '24 V pede 2 baterias de 12 V em série');
+assert(stationary24.bank.branchWh === 1800 * 2, 'Ramo 24 V com 150 Ah');
+assert(stationary24.bank.wiring.includes('SÉRIE'), stationary24.bank.wiring);
+assert(stationary24.dodApplied === null, 'DoD ignorado na estacionária');
+
+const lithium24on48 = calculateOffGridLoad({
+  ...offGridBase,
+  batteryModelId: 'li-24-100',
+  busVoltageV: 48,
+});
+assert(lithium24on48.bank.series === 2, 'Dois módulos de 24 V em série no barramento de 48 V');
+assert(lithium24on48.bank.branchWh === 4800, 'Ramo de dois módulos de 24 V = 4800 Wh');
+assert(
+  lithium24on48.bank.total === lithium24on48.bank.series * lithium24on48.bank.parallel,
+  'Total de módulos 24 V',
+);
+
+const incompatible = calculateOffGridLoad({
+  ...offGridBase,
+  batteryModelId: 'li-48-100',
+  busVoltageV: 24,
+});
+assert(!incompatible.bank.compatible, 'Módulo 48 V não fecha em barramento 24 V');
+
+assert(
+  validateOffGridInput({ ...offGridBase, dod: 0.65 }) !== null,
+  'DoD de lítio abaixo de 70% é inválido',
+);
+assert(
+  validateOffGridInput({ ...offGridBase, batteryModelId: 'st-12-240', dod: 0.5 }) === null,
+  'DoD 50% é válido na estacionária',
+);
+assert(
+  validateOffGridInput({ ...offGridBase, batteryModelId: 'st-12-240', dod: 0.2 }) !== null,
+  'DoD de estacionária abaixo de 30% é inválido',
+);
+
+const inconsistent = calculateOffGridLoad({ ...offGridBase, currentNeutral: 80, currentA: 5, currentB: 5 });
+assert(inconsistent.neutralInconsistent, 'Neutro acima das fases deve alertar');
+assert(inconsistent.power220W === 0, 'Carga 220 V não fica negativa');
+
+assert(nextCommercialSize(12, [3, 5, 8, 10, 12]) === 12, 'Porte exato não sobe de faixa');
+assert(validateOffGridInput({ ...offGridBase, currentA: 0, currentB: 0 }) !== null, 'Sem corrente de fase é inválido');
+
+const report = buildOffGridReportHtml(offGridBase, offGrid);
+assert(report.includes('8 kW') || report.includes('8kW'), 'Relatório cita o inversor sugerido');
+assert(report.includes('16x Módulos de Lítio 48V 100Ah'), 'Relatório cita o arranjo de lítio');
+assert(report.includes('Inversor Recomendado'), 'Relatório nomeia o inversor recomendado');
+assert(report.includes('Montagem:'), 'Relatório traz o guia de montagem');
+assert(report.includes(FIELD_HELP.neutral), 'Relatório inclui a explicação do neutro');
+assert(report.includes(FIELD_HELP.mono220), 'Relatório inclui a ajuda da saída 220V');
+const split = calculateOffGridLoad({ ...offGridBase, acOutput: 'split_phase' });
+assert(split.transformerStatus === 'split_phase', 'Bifásico nativo dispensa autotransformador');
+assert(split.transformerSuggestedKva === 0, 'Sem kVA de trafo na saída bifásica');
+const triOut = calculateOffGridLoad({ ...offGridBase, acOutput: 'triphasic' });
+assert(triOut.transformerStatus === 'triphasic', 'Trifásico nativo dispensa autotransformador');
+console.log(
+  `   Off-grid 20+15 A / neutro 8 A: ${offGrid.inverterSuggestedKw} kW · ${offGrid.bank.headline}`,
 );
