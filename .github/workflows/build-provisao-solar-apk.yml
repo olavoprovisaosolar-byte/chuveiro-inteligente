@@ -9,6 +9,7 @@ on:
       - cursor/telhado-poligonal-obstaculos-f794
       - cursor/obstaculos-interativos-f794
       - cursor/packing-misto-enchimento-f794
+      - cursor/levantamento-offgrid-f794
       - master
       - main
     paths:

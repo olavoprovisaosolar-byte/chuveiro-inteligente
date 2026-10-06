@@ -1,19 +1,21 @@
 import React from 'react';
 import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { FieldLabel } from './InfoTip';
 
 type Props = TextInputProps & {
   label: string;
   hint?: string;
   error?: string;
+  tip?: string;
 };
 
-export function InputField({ label, hint, error, style, ...rest }: Props) {
+export function InputField({ label, hint, error, tip, style, ...rest }: Props) {
   const { colors } = useTheme();
 
   return (
     <View style={styles.wrap}>
-      <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
+      <FieldLabel label={label} tip={tip} />
       <TextInput
         placeholderTextColor={colors.textMuted}
         style={[
@@ -37,11 +39,6 @@ export function InputField({ label, hint, error, style, ...rest }: Props) {
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 14 },
-  label: {
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 14,
-    marginBottom: 8,
-  },
   input: {
     borderWidth: 1,
     borderRadius: 14,
