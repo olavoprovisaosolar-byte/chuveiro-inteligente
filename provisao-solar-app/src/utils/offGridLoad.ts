@@ -3,13 +3,22 @@
  * Potências em W, tensões em V, correntes em A, energia em Wh.
  */
 
-export type PhaseSystem = 'biphasic' | 'triphasic';
 export type BatteryTech = 'lithium' | 'stationary';
 export type BatteryModelId = 'li-48-100' | 'li-24-100' | 'st-12-240' | 'st-12-150';
 export type BusVoltageV = 24 | 48;
+/** Padrão da rede medida no quadro (entrada). Independente da saída do inversor. */
+export type SupplyStandard = 'mono' | 'biphasic' | 'triphasic';
+export type MonoVoltage = 127 | 220;
+/** Par fase-neutro / fase-fase do padrão trifásico. */
+export type TriVoltagePair = '127_220' | '220_380';
 /** Topologia da saída AC que alimenta o quadro da casa. */
 export type AcOutputTopology = 'mono220' | 'split_phase' | 'triphasic';
-export type TransformerStatus = 'required' | 'split_phase' | 'triphasic' | 'no_127_load';
+/**
+ * required: rede bi/trifásica e saída 220 V monofásica — trafo de apoio.
+ * native_neutral: saída bifásica ou trifásica nativa — dispensa trafo.
+ * not_applicable: padrão monofásico — não há carga 127 V separada pelo neutro.
+ */
+export type TransformerStatus = 'required' | 'native_neutral' | 'not_applicable';
 
 /** Portes comerciais de inversor off-grid (kW), do menor para o maior. */
 export const COMMERCIAL_INVERTER_KW = [3, 5, 8, 10, 12, 15, 20, 25, 30, 40, 50] as const;
@@ -115,9 +124,11 @@ export type BatteryArrangement = {
 };
 
 export type OffGridLoadInput = {
-  system: PhaseSystem;
-  voltageFn: number;
-  voltageFf: number;
+  supply: SupplyStandard;
+  /** Usada quando supply é monofásico. */
+  monoVoltage: MonoVoltage;
+  /** Usada quando supply é trifásico. */
+  triPair: TriVoltagePair;
   currentA: number;
   currentB: number;
   currentC: number;
@@ -136,8 +147,12 @@ export type OffGridLoadInput = {
 };
 
 export type OffGridLoadResult = {
+  voltageFn: number;
+  voltageFf: number;
+  /** Parcela fase-neutro (127 V no padrão residencial; 220 V no trifásico 220/380). */
   power127W: number;
   powerTotalW: number;
+  /** Parcela fase-fase (220 V ou 380 V). */
   power220W: number;
   share127: number;
   share220: number;
@@ -170,6 +185,21 @@ export function nextCommercialSize(value: number, steps: readonly number[]): num
   const last = steps[steps.length - 1];
   const increment = last >= 10 ? 5 : 1;
   return Math.ceil((value - 1e-9) / increment) * increment;
+}
+
+/** Corrente nominal que a topologia de saída precisa entregar. */
+export function nominalOutputCurrentA(
+  powerW: number,
+  acOutput: AcOutputTopology,
+  voltageFn: number,
+): number {
+  if (!(powerW > 0)) return 0;
+  if (acOutput === 'split_phase') return powerW / (2 * 127);
+  if (acOutput === 'triphasic') {
+    const phaseVoltage = voltageFn > 0 ? voltageFn : 127;
+    return powerW / (3 * phaseVoltage);
+  }
+  return powerW / 220;
 }
 
 function ceilCount(total: number, unit: number): number {
@@ -246,16 +276,38 @@ function lithiumModelForBus(busVoltageV: BusVoltageV): BatteryModel {
   return batteryModelById(busVoltageV === 48 ? 'li-48-100' : 'li-24-100');
 }
 
+/** Tensões nominais do padrão escolhido. A medição não pede V livre. */
+export function supplyVoltages(input: Pick<OffGridLoadInput, 'supply' | 'monoVoltage' | 'triPair'>): {
+  voltageFn: number;
+  voltageFf: number;
+} {
+  if (input.supply === 'mono') {
+    const voltage = input.monoVoltage === 220 ? 220 : 127;
+    return { voltageFn: voltage, voltageFf: voltage };
+  }
+  if (input.supply === 'triphasic' && input.triPair === '220_380') {
+    return { voltageFn: 220, voltageFf: 380 };
+  }
+  return { voltageFn: 127, voltageFf: 220 };
+}
+
 export function validateOffGridInput(input: OffGridLoadInput): string | null {
-  if (!(input.voltageFn > 0)) return 'Informe a tensão fase-neutro (V).';
-  if (!(input.voltageFf > 0)) return 'Informe a tensão fase-fase (V).';
-  const currents = [input.currentA, input.currentB, input.currentNeutral];
-  if (input.system === 'triphasic') currents.push(input.currentC);
+  if (input.supply === 'mono' && input.monoVoltage !== 127 && input.monoVoltage !== 220) {
+    return 'Selecione a tensão do padrão monofásico: 127 V ou 220 V.';
+  }
+  const currents =
+    input.supply === 'mono'
+      ? [input.currentA]
+      : input.supply === 'triphasic'
+        ? [input.currentA, input.currentB, input.currentC, input.currentNeutral]
+        : [input.currentA, input.currentB, input.currentNeutral];
   if (currents.some((c) => !Number.isFinite(c) || c < 0)) {
     return 'As correntes medidas não podem ser negativas.';
   }
   const phaseSum =
-    input.currentA + input.currentB + (input.system === 'triphasic' ? input.currentC : 0);
+    input.supply === 'mono'
+      ? input.currentA
+      : input.currentA + input.currentB + (input.supply === 'triphasic' ? input.currentC : 0);
   if (phaseSum <= 0) return 'Informe ao menos uma corrente de fase maior que zero.';
   if (input.utilizationFactor < 0.6 - 1e-9 || input.utilizationFactor > 0.9 + 1e-9) {
     return 'O fator de ocupação deve ficar entre 60% e 90%.';
@@ -284,36 +336,51 @@ export function validateOffGridInput(input: OffGridLoadInput): string | null {
  * P_127 = I_neutro × V_FN
  * P_total = (Σ I_fases) × V_FN
  * P_220 = P_total − P_127
- * I_220 = P_total / V_FF
+ * Saída monofásica 220 V: I = P_total / 220
+ * Saída bifásica nativa: I por fase = P_total / (2 × 127)
+ * Saída trifásica: I por fase = P_total / (3 × V_FN)
  * P_inv = P_total / FU
  * E_Wh = P_total × horas / η_inv
  */
 export function calculateOffGridLoad(input: OffGridLoadInput): OffGridLoadResult {
-  const currentC = input.system === 'triphasic' ? Math.max(0, input.currentC) : 0;
+  const { voltageFn, voltageFf } = supplyVoltages(input);
   const currentA = Math.max(0, input.currentA);
-  const currentB = Math.max(0, input.currentB);
-  const currentNeutral = Math.max(0, input.currentNeutral);
+  const currentB = input.supply === 'mono' ? 0 : Math.max(0, input.currentB);
+  const currentC = input.supply === 'triphasic' ? Math.max(0, input.currentC) : 0;
+  const currentNeutral = input.supply === 'mono' ? 0 : Math.max(0, input.currentNeutral);
   const phaseSum = currentA + currentB + currentC;
 
-  const power127W = currentNeutral * input.voltageFn;
-  const powerTotalW = phaseSum * input.voltageFn;
-  const raw220 = powerTotalW - power127W;
-  const neutralInconsistent = raw220 < -1e-6;
-  const power220W = Math.max(0, raw220);
+  let power127W: number;
+  let powerTotalW: number;
+  let power220W: number;
+  let neutralInconsistent: boolean;
+  if (input.supply === 'mono') {
+    powerTotalW = currentA * voltageFn;
+    power127W = input.monoVoltage === 127 ? powerTotalW : 0;
+    power220W = input.monoVoltage === 220 ? powerTotalW : 0;
+    neutralInconsistent = false;
+  } else {
+    power127W = currentNeutral * voltageFn;
+    powerTotalW = phaseSum * voltageFn;
+    const raw220 = powerTotalW - power127W;
+    neutralInconsistent = raw220 < -1e-6;
+    power220W = Math.max(0, raw220);
+  }
   const chart127 = Math.min(Math.max(0, power127W), powerTotalW);
   const share127 = powerTotalW > 0 ? chart127 / powerTotalW : 0;
   const share220 = powerTotalW > 0 ? 1 - share127 : 0;
 
-  const currentInverterA = input.voltageFf > 0 ? powerTotalW / input.voltageFf : 0;
+  const currentInverterA = nominalOutputCurrentA(powerTotalW, input.acOutput, voltageFn);
   const inverterMinW =
     input.utilizationFactor > 0 ? powerTotalW / input.utilizationFactor : 0;
   const inverterSuggestedKw = nextCommercialSize(inverterMinW / 1000, COMMERCIAL_INVERTER_KW);
 
+  const hasNeutralSplit = input.supply === 'biphasic' || input.supply === 'triphasic';
+  const nativeNeutral = input.acOutput === 'split_phase' || input.acOutput === 'triphasic';
   const transformerW = power127W / TRAFO_LOAD_FACTOR;
-  let transformerStatus: TransformerStatus = 'required';
-  if (power127W <= 1e-6) transformerStatus = 'no_127_load';
-  else if (input.acOutput === 'split_phase') transformerStatus = 'split_phase';
-  else if (input.acOutput === 'triphasic') transformerStatus = 'triphasic';
+  let transformerStatus: TransformerStatus = 'not_applicable';
+  if (nativeNeutral) transformerStatus = 'native_neutral';
+  else if (hasNeutralSplit && input.acOutput === 'mono220') transformerStatus = 'required';
   const transformerSuggestedKva =
     transformerStatus === 'required'
       ? nextCommercialSize(transformerW / 1000, COMMERCIAL_TRAFO_KVA)
@@ -347,6 +414,8 @@ export function calculateOffGridLoad(input: OffGridLoadInput): OffGridLoadResult
     model.id === selectedModel.id ? dodApplied : DOD_RANGE[model.tech].default;
 
   return {
+    voltageFn,
+    voltageFf,
     power127W,
     powerTotalW,
     power220W,

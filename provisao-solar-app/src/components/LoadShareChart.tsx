@@ -12,10 +12,19 @@ type Props = {
   share220: number;
   power127Kw: number;
   power220Kw: number;
+  lowLabel?: string;
+  highLabel?: string;
 };
 
-/** Rosca 127 V (amarelo) × 220 V (azul). */
-export function LoadShareChart({ share127, share220, power127Kw, power220Kw }: Props) {
+/** Rosca da parcela fase-neutro (amarelo) × fase-fase (azul). */
+export function LoadShareChart({
+  share127,
+  share220,
+  power127Kw,
+  power220Kw,
+  lowLabel = '127 V',
+  highLabel = '220 V',
+}: Props) {
   const { colors } = useTheme();
   const size = 168;
   const stroke = 22;
@@ -24,6 +33,9 @@ export function LoadShareChart({ share127, share220, power127Kw, power220Kw }: P
   const fraction127 = Math.min(1, Math.max(0, share127));
   const dash127 = fraction127 * circumference;
   const empty = share127 + share220 <= 0;
+  const emphasizeHigh = fraction127 <= 0.001 && share220 > 0;
+  const centerFraction = emphasizeHigh ? Math.min(1, Math.max(0, share220)) : fraction127;
+  const centerLabel = emphasizeHigh ? highLabel : lowLabel;
 
   return (
     <View style={styles.wrap}>
@@ -53,14 +65,14 @@ export function LoadShareChart({ share127, share220, power127Kw, power220Kw }: P
         </Svg>
         <View style={styles.center} pointerEvents="none">
           <Text style={[styles.centerValue, { color: colors.text }]}>
-            {formatNumber(fraction127 * 100, 0)}%
+            {formatNumber(centerFraction * 100, 0)}%
           </Text>
-          <Text style={[styles.centerLabel, { color: colors.textMuted }]}>127 V</Text>
+          <Text style={[styles.centerLabel, { color: colors.textMuted }]}>{centerLabel}</Text>
         </View>
       </View>
       <View style={styles.legend}>
-        <LegendDot color={YELLOW_127} label="Carga 127 V" value={`${formatNumber(power127Kw)} kW · ${formatNumber(share127 * 100, 0)}%`} />
-        <LegendDot color={BLUE_220} label="Carga 220 V" value={`${formatNumber(power220Kw)} kW · ${formatNumber(share220 * 100, 0)}%`} />
+        <LegendDot color={YELLOW_127} label={`Carga ${lowLabel}`} value={`${formatNumber(power127Kw)} kW · ${formatNumber(share127 * 100, 0)}%`} />
+        <LegendDot color={BLUE_220} label={`Carga ${highLabel}`} value={`${formatNumber(power220Kw)} kW · ${formatNumber(share220 * 100, 0)}%`} />
       </View>
     </View>
   );

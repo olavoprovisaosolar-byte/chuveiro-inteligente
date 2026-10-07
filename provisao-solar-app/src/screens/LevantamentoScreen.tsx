@@ -18,17 +18,23 @@ import {
   calculateOffGridLoad,
   DOD_RANGE,
   modelsForTech,
+  MonoVoltage,
   OffGridLoadInput,
-  PhaseSystem,
+  SupplyStandard,
+  TriVoltagePair,
   validateOffGridInput,
 } from '../utils/offGridLoad';
 import {
   acOutputTag,
   buildOffGridReportHtml,
   describeAssembly,
+  describeOutputCurrent,
   describeTransformer,
   dodConsideredLabel,
   FIELD_HELP,
+  loadSplitLabels,
+  supplyHelp,
+  supplyTitle,
 } from '../utils/offGridReport';
 
 const FU_STEPS = [0.6, 0.7, 0.8, 0.9] as const;
@@ -42,9 +48,9 @@ function parseNonNegative(text: string): number {
 
 export function LevantamentoScreen() {
   const { colors } = useTheme();
-  const [system, setSystem] = useState<PhaseSystem>('biphasic');
-  const [voltageFnText, setVoltageFnText] = useState('127');
-  const [voltageFfText, setVoltageFfText] = useState('220');
+  const [supply, setSupply] = useState<SupplyStandard>('biphasic');
+  const [monoVoltage, setMonoVoltage] = useState<MonoVoltage>(127);
+  const [triPair, setTriPair] = useState<TriVoltagePair>('127_220');
   const [currentAText, setCurrentAText] = useState('');
   const [currentBText, setCurrentBText] = useState('');
   const [currentCText, setCurrentCText] = useState('');
@@ -74,9 +80,9 @@ export function LevantamentoScreen() {
     const efficiencyPct = parseLocaleNumber(efficiencyText);
     const dodPct = parseLocaleNumber(dodText);
     const input: OffGridLoadInput = {
-      system,
-      voltageFn: parseLocaleNumber(voltageFnText),
-      voltageFf: parseLocaleNumber(voltageFfText),
+      supply,
+      monoVoltage,
+      triPair,
       currentA: parseNonNegative(currentAText),
       currentB: parseNonNegative(currentBText),
       currentC: parseNonNegative(currentCText),
@@ -103,11 +109,11 @@ export function LevantamentoScreen() {
     dodText,
     efficiencyText,
     acOutput,
-    system,
+    monoVoltage,
+    supply,
+    triPair,
     useDod,
     utilization,
-    voltageFfText,
-    voltageFnText,
   ]);
 
   const validationError = validateOffGridInput(draft);
@@ -162,102 +168,170 @@ export function LevantamentoScreen() {
       subtitle="Medição com alicate e dimensionamento off-grid / retrofit."
     >
       <Section
-        title="1. Dados do Quadro de Medição (Leituras de Campo)"
-        hint="Correntes lidas com o alicate amperímetro em cada condutor do quadro."
+        title="1. Medição do Padrão da Residência (Entrada)"
+        hint="Leituras de campo com alicate amperímetro, só nos condutores que o padrão possui."
       >
-        <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>Tipo de sistema</Text>
-        <Segment
-          options={[
-            { key: 'biphasic', label: 'Bifásico' },
-            { key: 'triphasic', label: 'Trifásico' },
-          ]}
-          value={system}
-          onChange={setSystem}
+        <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>
+          Padrão da Rede Residencial/Comercial
+        </Text>
+        <ChoiceCard
+          selected={supply === 'mono'}
+          title={supplyTitle('mono')}
+          body={supplyHelp('mono')}
+          onPress={() => setSupply('mono')}
         />
-        <View style={styles.pair}>
-          <View style={styles.pairItem}>
-            <InputField
-              label="Tensão fase-neutro (V)"
-              value={voltageFnText}
-              onChangeText={setVoltageFnText}
-              keyboardType="decimal-pad"
-              placeholder="127"
+        <ChoiceCard
+          selected={supply === 'biphasic'}
+          title={supplyTitle('biphasic')}
+          body={supplyHelp('biphasic')}
+          onPress={() => setSupply('biphasic')}
+        />
+        <ChoiceCard
+          selected={supply === 'triphasic'}
+          title={supplyTitle('triphasic')}
+          body={supplyHelp('triphasic')}
+          onPress={() => setSupply('triphasic')}
+        />
+        {supply === 'mono' ? (
+          <>
+            <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>
+              Tensão Selecionada (127V ou 220V)
+            </Text>
+            <Segment
+              options={[
+                { key: '127', label: '127 V' },
+                { key: '220', label: '220 V' },
+              ]}
+              value={String(monoVoltage)}
+              onChange={(key) => setMonoVoltage(key === '220' ? 220 : 127)}
             />
-          </View>
-          <View style={styles.pairItem}>
             <InputField
-              label="Tensão fase-fase (V)"
-              value={voltageFfText}
-              onChangeText={setVoltageFfText}
-              keyboardType="decimal-pad"
-              placeholder="220"
-            />
-          </View>
-        </View>
-        <View style={styles.pair}>
-          <View style={styles.pairItem}>
-            <InputField
-              label="Corrente fase A (A)"
+              label="Corrente Fase A (A)"
               icon="flash-outline"
               value={currentAText}
               onChangeText={setCurrentAText}
               keyboardType="decimal-pad"
               placeholder="0"
             />
-          </View>
-          <View style={styles.pairItem}>
+          </>
+        ) : null}
+        {supply === 'biphasic' ? (
+          <>
+            <Text style={[styles.fixedVoltage, { color: colors.textSecondary }]}>
+              Tensões deste padrão: 127 V fase-neutro e 220 V fase-fase.
+            </Text>
+            <View style={styles.pair}>
+              <View style={styles.pairItem}>
+                <InputField
+                  label="Corrente Fase A (A)"
+                  icon="flash-outline"
+                  value={currentAText}
+                  onChangeText={setCurrentAText}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                />
+              </View>
+              <View style={styles.pairItem}>
+                <InputField
+                  label="Corrente Fase B (A)"
+                  icon="flash-outline"
+                  value={currentBText}
+                  onChangeText={setCurrentBText}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                />
+              </View>
+            </View>
             <InputField
-              label="Corrente fase B (A)"
-              icon="flash-outline"
-              value={currentBText}
-              onChangeText={setCurrentBText}
+              label="Corrente no Neutro (A)"
+              icon="ellipse"
+              highlight
+              tip={FIELD_HELP.neutral}
+              hint={FIELD_HELP.neutral}
+              value={currentNeutralText}
+              onChangeText={setCurrentNeutralText}
               keyboardType="decimal-pad"
               placeholder="0"
             />
-          </View>
-        </View>
-        {system === 'triphasic' ? (
-          <InputField
-            label="Corrente fase C (A)"
-            icon="flash-outline"
-            value={currentCText}
-            onChangeText={setCurrentCText}
-            keyboardType="decimal-pad"
-            placeholder="0"
-          />
+          </>
         ) : null}
-        <InputField
-          label="Corrente no neutro (A)"
-          icon="ellipse"
-          highlight
-          tip={FIELD_HELP.neutral}
-          hint={FIELD_HELP.neutral}
-          value={currentNeutralText}
-          onChangeText={setCurrentNeutralText}
-          keyboardType="decimal-pad"
-          placeholder="Opcional — indica o consumo em 127 V"
-        />
+        {supply === 'triphasic' ? (
+          <>
+            <Text style={[styles.fieldCaption, { color: colors.textSecondary }]}>
+              Tensão do padrão trifásico
+            </Text>
+            <Segment
+              options={[
+                { key: '127_220', label: '127/220 V' },
+                { key: '220_380', label: '220/380 V' },
+              ]}
+              value={triPair}
+              onChange={(key) => setTriPair(key === '220_380' ? '220_380' : '127_220')}
+            />
+            <View style={styles.pair}>
+              <View style={styles.pairItem}>
+                <InputField
+                  label="Corrente Fase A (A)"
+                  icon="flash-outline"
+                  value={currentAText}
+                  onChangeText={setCurrentAText}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                />
+              </View>
+              <View style={styles.pairItem}>
+                <InputField
+                  label="Corrente Fase B (A)"
+                  icon="flash-outline"
+                  value={currentBText}
+                  onChangeText={setCurrentBText}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                />
+              </View>
+            </View>
+            <InputField
+              label="Corrente Fase C (A)"
+              icon="flash-outline"
+              value={currentCText}
+              onChangeText={setCurrentCText}
+              keyboardType="decimal-pad"
+              placeholder="0"
+            />
+            <InputField
+              label="Corrente no Neutro (A)"
+              icon="ellipse"
+              highlight
+              tip={FIELD_HELP.neutral}
+              hint={FIELD_HELP.neutral}
+              value={currentNeutralText}
+              onChangeText={setCurrentNeutralText}
+              keyboardType="decimal-pad"
+              placeholder="0"
+            />
+          </>
+        ) : null}
       </Section>
 
       <Section
-        title="Especificação da Saída AC do Inversor (Alimentação da Casa)"
+        title="2. Especificação da Saída AC do Inversor (Alimentação da Casa)"
         hint={FIELD_HELP.inverterIntro}
       >
         <ChoiceCard
           selected={acOutput === 'mono220'}
-          title="220V Monofásico (Fase + Neutro)"
+          title="Saída 220V Monofásica (Fase + Neutro)"
           body={FIELD_HELP.mono220}
           onPress={() => setAcOutput('mono220')}
         />
         <ChoiceCard
           selected={acOutput === 'split_phase'}
-          title="Bifásico Nativo / Split-Phase (Fase A + Fase B + Neutro)"
+          title="Saída Bifásica Nativa (Split-Phase: Fase A + Fase B + Neutro)"
           body={FIELD_HELP.splitPhase}
           onPress={() => setAcOutput('split_phase')}
         />
         <ChoiceCard
           selected={acOutput === 'triphasic'}
-          title="Trifásico Nativo (3 Fases + Neutro)"
+          title="Saída Trifásica Nativa (3 Fases + Neutro)"
           body={FIELD_HELP.triphasic}
           onPress={() => setAcOutput('triphasic')}
         />
@@ -406,20 +480,21 @@ export function LevantamentoScreen() {
               share220={result.share220}
               power127Kw={result.power127W / 1000}
               power220Kw={result.power220W / 1000}
+              lowLabel={loadSplitLabels(draft).low}
+              highLabel={loadSplitLabels(draft).high}
             />
             <Metric label="Potência total medida" value={`${formatNumber(result.powerTotalW / 1000)} kW`} emphasize />
             <Metric
-              label="Carga 127 V"
+              label={`Carga ${loadSplitLabels(draft).low}`}
               value={`${formatNumber(result.power127W / 1000)} kW · ${formatNumber(result.share127 * 100, 0)}%`}
             />
             <Metric
-              label="Carga 220 V"
+              label={`Carga ${loadSplitLabels(draft).high}`}
               value={`${formatNumber(result.power220W / 1000)} kW · ${formatNumber(result.share220 * 100, 0)}%`}
             />
-            <Metric
-              label="Corrente nominal de saída em 220 V"
-              value={`${formatNumber(result.currentInverterA)} A`}
-            />
+            <Text style={[styles.outputCurrent, { color: colors.text, borderTopColor: colors.border }]}>
+              {describeOutputCurrent(draft, result)}
+            </Text>
             {result.neutralInconsistent ? (
               <Banner
                 tone="warning"
@@ -465,17 +540,10 @@ export function LevantamentoScreen() {
               <Text style={[styles.alertDetail, { color: colors.text }]}>{describeTransformer(result)}</Text>
               <Text style={[styles.wiring, { color: colors.textSecondary }]}>{FIELD_HELP.mono220}</Text>
             </View>
-          ) : (
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow },
-              ]}
-            >
-              <Text style={[styles.cardTitle, { color: colors.text }]}>Autotransformador de apoio</Text>
-              <Text style={[styles.wiring, { color: colors.textSecondary }]}>{describeTransformer(result)}</Text>
-            </View>
-          )}
+          ) : null}
+          {result.transformerStatus === 'native_neutral' ? (
+            <Banner tone="success" text={FIELD_HELP.nativeNeutral} />
+          ) : null}
 
           <View
             style={[
@@ -718,13 +786,23 @@ function Metric({ label, value, emphasize }: { label: string; value: string; emp
   );
 }
 
-function Banner({ tone, text }: { tone: 'warning' | 'info'; text: string }) {
+function Banner({ tone, text }: { tone: 'warning' | 'info' | 'success'; text: string }) {
   const { colors } = useTheme();
   const background = tone === 'warning' ? colors.accentSoft : colors.primarySoft;
-  const icon = tone === 'warning' ? 'warning-outline' : 'information-circle-outline';
+  const icon =
+    tone === 'warning' ? 'warning-outline' : tone === 'success' ? 'checkmark-circle-outline' : 'information-circle-outline';
+  const iconColor = tone === 'warning' ? colors.warning : tone === 'success' ? colors.success : colors.primary;
   return (
-    <View style={[styles.banner, { backgroundColor: background, borderColor: colors.border }]}>
-      <Ionicons name={icon} size={18} color={tone === 'warning' ? colors.warning : colors.primary} />
+    <View
+      style={[
+        styles.banner,
+        {
+          backgroundColor: background,
+          borderColor: tone === 'success' ? colors.success : colors.border,
+        },
+      ]}
+    >
+      <Ionicons name={icon} size={18} color={iconColor} />
       <Text style={[styles.bannerText, { color: colors.text }]}>{text}</Text>
     </View>
   );
@@ -753,6 +831,12 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_500Medium',
     fontSize: 14,
     marginBottom: 8,
+  },
+  fixedVoltage: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
   },
   pair: {
     flexDirection: 'row',
@@ -867,6 +951,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     marginTop: 8,
+  },
+  outputCurrent: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   metric: {
     borderTopWidth: StyleSheet.hairlineWidth,
