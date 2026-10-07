@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import React, { useMemo, useState } from 'react';
@@ -33,9 +34,17 @@ import {
   dodConsideredLabel,
   FIELD_HELP,
   loadSplitLabels,
+  offGridReportFileName,
   supplyHelp,
   supplyTitle,
 } from '../utils/offGridReport';
+
+function todayPtBr(): string {
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${now.getFullYear()}`;
+}
 
 const FU_STEPS = [0.6, 0.7, 0.8, 0.9] as const;
 
@@ -67,6 +76,10 @@ export function LevantamentoScreen() {
   const [batteryModelId, setBatteryModelId] = useState<BatteryModelId>('li-48-100');
   const [showAlternative, setShowAlternative] = useState(false);
   const [efficiencyText, setEfficiencyText] = useState('92');
+  const [clientName, setClientName] = useState('');
+  const [clientLocation, setClientLocation] = useState('');
+  const [surveyDate, setSurveyDate] = useState(todayPtBr);
+  const [clientError, setClientError] = useState('');
   const [exporting, setExporting] = useState(false);
 
   const draft = useMemo(() => {
@@ -139,17 +152,35 @@ export function LevantamentoScreen() {
     setUseDod(true);
   };
 
+  const reportFileName = offGridReportFileName(clientName, surveyDate);
+
   const onExportPdf = async () => {
     if (!result) return;
+    if (!clientName.trim()) {
+      setClientError('Informe o nome do cliente ou do projeto.');
+      return;
+    }
+    setClientError('');
     setExporting(true);
     try {
-      const html = buildOffGridReportHtml(draft, result);
+      const html = buildOffGridReportHtml(draft, result, {
+        clientName,
+        location: clientLocation,
+        surveyDate,
+      });
       const file = await Print.printToFileAsync({ html });
+      let uri = file.uri;
+      const base = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+      if (base) {
+        const dest = `${base}${reportFileName}`;
+        await FileSystem.copyAsync({ from: file.uri, to: dest });
+        uri = dest;
+      }
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(file.uri, {
+        await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
-          dialogTitle: 'Relatório técnico off-grid',
+          dialogTitle: reportFileName,
           UTI: 'com.adobe.pdf',
         });
       } else {
@@ -167,6 +198,42 @@ export function LevantamentoScreen() {
       title="Levantamento"
       subtitle="Medição com alicate e dimensionamento off-grid / retrofit."
     >
+      <Section
+        title="Identificação do cliente"
+        hint="Estes dados abrem a proposta técnica e definem o nome do PDF."
+      >
+        <InputField
+          label="Nome do Cliente / Projeto"
+          value={clientName}
+          onChangeText={(value) => {
+            setClientName(value);
+            if (value.trim()) setClientError('');
+          }}
+          placeholder="Ex.: João da Silva"
+          error={clientError || undefined}
+          autoCapitalize="words"
+        />
+        <InputField
+          label="Endereço/Cidade"
+          value={clientLocation}
+          onChangeText={setClientLocation}
+          placeholder="Ex.: Manaus/AM"
+          autoCapitalize="words"
+        />
+        <InputField
+          label="Data do Levantamento"
+          value={surveyDate}
+          onChangeText={setSurveyDate}
+          placeholder={todayPtBr()}
+          hint="Preenchida com a data de hoje. Ajuste se o levantamento foi em outro dia."
+        />
+        <Text style={[styles.fileName, { color: colors.textSecondary }]}>
+          {clientName.trim()
+            ? `Arquivo: ${reportFileName}`
+            : 'Arquivo: Relatorio_OffGrid_[Nome_do_Cliente]_[Data].pdf'}
+        </Text>
+      </Section>
+
       <Section
         title="1. Medição do Padrão da Residência (Entrada)"
         hint="Leituras de campo com alicate amperímetro, só nos condutores que o padrão possui."
@@ -621,6 +688,11 @@ export function LevantamentoScreen() {
             loading={exporting}
             style={styles.exportBtn}
           />
+          <Text style={[styles.fileName, { color: colors.textSecondary }]}>
+            {clientName.trim()
+              ? `Download: ${reportFileName}`
+              : 'Informe o nome do cliente para liberar o nome do arquivo.'}
+          </Text>
         </>
       ) : null}
     </ScreenContainer>
@@ -1053,5 +1125,11 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 6,
   },
-  exportBtn: { marginBottom: 12 },
+  exportBtn: { marginBottom: 8 },
+  fileName: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
 });
