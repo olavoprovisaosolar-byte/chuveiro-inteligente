@@ -5,6 +5,8 @@ import {
   BatteryTech,
   OffGridLoadInput,
   OffGridLoadResult,
+  SupplyStandard,
+  supplyVoltages,
 } from './offGridLoad';
 
 /** Textos de apoio exibidos na tela e repetidos no PDF. */
@@ -25,7 +27,26 @@ export const FIELD_HELP = {
     'Saída industrial/comercial (380V/220V ou 220V/127V). Atende motores e quadros trifásicos.',
   lithiumBadge: 'Alta durabilidade / Menor espaço',
   stationaryBadge: 'Custo inicial reduzido',
+  supplyMono:
+    'Um condutor de fase e o neutro. Informe só a corrente da fase A e a tensão da rede (127 V ou 220 V).',
+  supplyBi:
+    'Duas fases e o neutro em 127 V/220 V. A corrente do neutro separa a carga de 127 V da carga de 220 V.',
+  supplyTri:
+    'Três fases e o neutro. 127 V/220 V no padrão residencial ou 220 V/380 V no padrão industrial.',
+  nativeNeutral: 'Topologia com Neutro Nativo. Dispensa Autotransformador.',
 } as const;
+
+export function supplyTitle(supply: SupplyStandard): string {
+  if (supply === 'mono') return 'Monofásico Fase + Neutro (127V ou 220V)';
+  if (supply === 'biphasic') return 'Bifásico Fase + Fase + Neutro (127V/220V)';
+  return 'Trifásico 3 Fases + Neutro (127V/220V ou 220V/380V)';
+}
+
+export function supplyHelp(supply: SupplyStandard): string {
+  if (supply === 'mono') return FIELD_HELP.supplyMono;
+  if (supply === 'biphasic') return FIELD_HELP.supplyBi;
+  return FIELD_HELP.supplyTri;
+}
 
 export function acOutputTag(output: AcOutputTopology): string {
   if (output === 'mono220') return 'Saída AC: 220V Monofásica';
@@ -34,9 +55,18 @@ export function acOutputTag(output: AcOutputTopology): string {
 }
 
 export function acOutputTitle(output: AcOutputTopology): string {
-  if (output === 'mono220') return '220V Monofásico (Fase + Neutro)';
-  if (output === 'split_phase') return 'Bifásico Nativo / Split-Phase (Fase A + Fase B + Neutro)';
-  return 'Trifásico Nativo (3 Fases + Neutro)';
+  if (output === 'mono220') return 'Saída 220V Monofásica (Fase + Neutro)';
+  if (output === 'split_phase') return 'Saída Bifásica Nativa (Split-Phase: Fase A + Fase B + Neutro)';
+  return 'Saída Trifásica Nativa (3 Fases + Neutro)';
+}
+
+/** Rótulos da rosca. No trifásico 220/380 a parcela do neutro é 220 V, não 127 V. */
+export function loadSplitLabels(input: OffGridLoadInput): { low: string; high: string } {
+  const { voltageFn, voltageFf } = supplyVoltages(input);
+  if (input.supply === 'triphasic' && input.triPair === '220_380') {
+    return { low: `${voltageFn} V (F-N)`, high: `${voltageFf} V (F-F)` };
+  }
+  return { low: '127 V', high: '220 V' };
 }
 
 export function dodConsideredLabel(tech: BatteryTech, dodPercent: number, useDod: boolean): string {
@@ -62,16 +92,12 @@ function pct(fraction: number): string {
 }
 
 export function describeTransformer(result: OffGridLoadResult): string {
-  if (result.transformerStatus === 'no_127_load') {
-    return 'Sem carga 127 V medida no neutro. Autotransformador não é necessário.';
+  if (result.transformerStatus === 'native_neutral') return FIELD_HELP.nativeNeutral;
+  if (result.transformerStatus === 'not_applicable') {
+    return 'Padrão monofásico: a carga inteira está na tensão selecionada. Autotransformador de apoio não se aplica.';
   }
-  if (result.transformerStatus === 'split_phase') {
-    return 'Saída bifásica nativa (127V/220V): alimenta tomadas 127V e cargas 220V sem autotransformador.';
-  }
-  if (result.transformerStatus === 'triphasic') {
-    return 'Saída trifásica nativa: o neutro atende os circuitos de 127V sem autotransformador.';
-  }
-  return `Potência do Trafo: ${formatNumber(result.transformerSuggestedKva)} kVA (Para atender a carga 127V de ${kw(result.power127W)})`;
+  const loadName = result.voltageFn === 127 ? '127V' : `${formatNumber(result.voltageFn, 0)}V fase-neutro`;
+  return `Potência do Trafo: ${formatNumber(result.transformerSuggestedKva)} kVA (Para atender a carga ${loadName} de ${kw(result.power127W)})`;
 }
 
 /** Guia rápido de ligação do banco instalado. */
@@ -101,32 +127,40 @@ export function describeDod(result: OffGridLoadResult): string {
 
 /** HTML imprimível do relatório técnico de campo. */
 export function buildOffGridReportHtml(input: OffGridLoadInput, result: OffGridLoadResult): string {
-  const systemLabel = input.system === 'triphasic' ? 'Trifásico (3F+N)' : 'Bifásico (F-F-N)';
+  const { voltageFn, voltageFf } = supplyVoltages(input);
+  const systemLabel = `${supplyTitle(input.supply)}. ${supplyHelp(input.supply)}`;
   const outputLabel = `${acOutputTitle(input.acOutput)} · ${acOutputTag(input.acOutput)}`;
+  const split = loadSplitLabels(input);
   const model = batteryModelById(input.batteryModelId);
   const tech = model.tech === 'lithium' ? 'Lítio (LiFePO4)' : 'Estacionária (chumbo-ácido)';
   const materials = [
     `Inversor Recomendado: ${formatNumber(result.inverterSuggestedKw)} kW (${acOutputTag(input.acOutput)}; mínimo calculado ${kw(result.inverterMinW)}, ocupação ${pct(result.utilizationFactor)})`,
     result.transformerStatus === 'required'
       ? `Autotransformador de Apoio Necessário. ${describeTransformer(result)}`
-      : describeTransformer(result),
+      : result.transformerStatus === 'native_neutral'
+        ? FIELD_HELP.nativeNeutral
+        : describeTransformer(result),
     `${describeBatteryBank(input, result)} ${describeAssembly(result)}`,
   ];
 
   const rows: Array<[string, string]> = [
-    ['Sistema', systemLabel],
-    ['Tensão fase-neutro', `${formatNumber(input.voltageFn, 0)} V`],
-    ['Tensão fase-fase', `${formatNumber(input.voltageFf, 0)} V`],
+    ['Padrão da rede', systemLabel],
+    ['Tensão fase-neutro', `${formatNumber(voltageFn, 0)} V`],
+    ['Tensão fase-fase', `${formatNumber(voltageFf, 0)} V`],
     ['Corrente fase A', `${formatNumber(input.currentA)} A`],
-    ['Corrente fase B', `${formatNumber(input.currentB)} A`],
-    ...(input.system === 'triphasic'
+    ...(input.supply === 'mono'
+      ? []
+      : [['Corrente fase B', `${formatNumber(input.currentB)} A`] as [string, string]]),
+    ...(input.supply === 'triphasic'
       ? [['Corrente fase C', `${formatNumber(input.currentC)} A`] as [string, string]]
       : []),
-    ['Corrente de neutro', `${formatNumber(input.currentNeutral)} A`],
+    ...(input.supply === 'mono'
+      ? []
+      : [['Corrente de neutro', `${formatNumber(input.currentNeutral)} A`] as [string, string]]),
     ['Potência total', kw(result.powerTotalW)],
-    ['Carga 127 V', `${kw(result.power127W)} (${pct(result.share127)})`],
-    ['Carga 220 V', `${kw(result.power220W)} (${pct(result.share220)})`],
-    ['Corrente equivalente em 220 V', `${formatNumber(result.currentInverterA)} A`],
+    [`Carga ${split.low}`, `${kw(result.power127W)} (${pct(result.share127)})`],
+    [`Carga ${split.high}`, `${kw(result.power220W)} (${pct(result.share220)})`],
+    [`Corrente equivalente em ${formatNumber(voltageFf, 0)} V`, `${formatNumber(result.currentInverterA)} A`],
     ['Inversor Recomendado', `${formatNumber(result.inverterSuggestedKw)} kW`],
     ['Saída AC', acOutputTag(input.acOutput)],
     ['Montagem do banco', describeAssembly(result)],
@@ -153,8 +187,12 @@ export function buildOffGridReportHtml(input: OffGridLoadInput, result: OffGridL
     .join('');
   const list = materials.map((item) => `<li>${esc(item)}</li>`).join('');
   const warning = result.neutralInconsistent
-    ? '<p class="warn">A corrente de neutro implica mais potência em 127 V do que a soma das fases. Revise a medição antes de fechar o orçamento.</p>'
+    ? '<p class="warn">A corrente de neutro implica mais potência fase-neutro do que a soma das fases. Revise a medição antes de fechar o orçamento.</p>'
     : '';
+  const nativeNotice =
+    result.transformerStatus === 'native_neutral'
+      ? `<p class="ok">${esc(FIELD_HELP.nativeNeutral)}</p>`
+      : '';
   const surge = result.surgeMarginTight
     ? '<p class="warn">Fator de ocupação alto: a folga para partida de motores e ar-condicionado fica apertada. Confirme a potência de surto do inversor.</p>'
     : '<p>Motores e ar-condicionado pedem surto de partida (em geral 2× por poucos segundos). Confirme essa capacidade no datasheet do inversor.</p>';
@@ -175,6 +213,7 @@ export function buildOffGridReportHtml(input: OffGridLoadInput, result: OffGridL
     td:first-child { color: #5A6B62; width: 46%; }
     td:last-child { text-align: right; font-weight: 600; }
     .warn { background: #FFF4D6; border: 1px solid #F5D78A; padding: 10px 12px; border-radius: 8px; }
+    .ok { background: #E5F6EC; border: 1px solid #1B8A55; padding: 10px 12px; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -182,6 +221,7 @@ export function buildOffGridReportHtml(input: OffGridLoadInput, result: OffGridL
   <h1>Levantamento de carga e dimensionamento off-grid</h1>
   <p>Relatório de campo para retrofit / sistema isolado. Valores a partir das correntes medidas com alicate amperímetro.</p>
   ${warning}
+  ${nativeNotice}
   <h2>Medição e diagnóstico</h2>
   <table>${table}</table>
   <h2>Lista de materiais sugerida</h2>
@@ -189,9 +229,14 @@ export function buildOffGridReportHtml(input: OffGridLoadInput, result: OffGridL
   ${surge}
   <h2>Textos de apoio</h2>
   <ul>
+    <li>${esc(supplyTitle(input.supply))}: ${esc(supplyHelp(input.supply))}</li>
+    <li>${esc(FIELD_HELP.supplyMono)}</li>
+    <li>${esc(FIELD_HELP.supplyBi)}</li>
+    <li>${esc(FIELD_HELP.supplyTri)}</li>
     <li>${esc(FIELD_HELP.neutral)}</li>
     <li>${esc(FIELD_HELP.inverterIntro)}</li>
     <li>${esc(acOutputTitle(input.acOutput))}: ${esc(input.acOutput === 'mono220' ? FIELD_HELP.mono220 : input.acOutput === 'split_phase' ? FIELD_HELP.splitPhase : FIELD_HELP.triphasic)}</li>
+    <li>${esc(FIELD_HELP.nativeNeutral)}</li>
     <li>${esc(FIELD_HELP.utilization)}</li>
     <li>${esc(FIELD_HELP.dod)}</li>
     <li>Lítio (LiFePO4): ${esc(FIELD_HELP.lithiumBadge)}. Estacionária: ${esc(FIELD_HELP.stationaryBadge)}.</li>

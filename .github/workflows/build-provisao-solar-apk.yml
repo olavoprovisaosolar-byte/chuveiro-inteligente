@@ -10,6 +10,7 @@ on:
       - cursor/obstaculos-interativos-f794
       - cursor/packing-misto-enchimento-f794
       - cursor/levantamento-offgrid-f794
+      - cursor/padrao-rede-saida-inversor-f794
       - master
       - main
     paths:

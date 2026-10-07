@@ -205,9 +205,9 @@ console.log(
 );
 
 const offGridBase: OffGridLoadInput = {
-  system: 'biphasic',
-  voltageFn: 127,
-  voltageFf: 220,
+  supply: 'biphasic',
+  monoVoltage: 127,
+  triPair: '127_220',
   currentA: 20,
   currentB: 15,
   currentC: 40,
@@ -226,7 +226,9 @@ const offGrid = calculateOffGridLoad(offGridBase);
 assert(almostEqual(offGrid.power127W, 8 * 127), 'P127 = Ineutro × Vfn');
 assert(almostEqual(offGrid.powerTotalW, (20 + 15) * 127), 'Ptotal bifásico ignora fase C');
 assert(almostEqual(offGrid.power220W, offGrid.powerTotalW - offGrid.power127W), 'P220 = Ptotal − P127');
+assert(offGrid.voltageFn === 127 && offGrid.voltageFf === 220, 'Bifásico trava 127/220 V');
 assert(almostEqual(offGrid.currentInverterA, offGrid.powerTotalW / 220), 'I220 = Ptotal / Vff');
+assert(offGrid.transformerStatus === 'required', 'Bifásico com saída 220 V monofásica exige autotransformador');
 assert(almostEqual(offGrid.inverterMinW, offGrid.powerTotalW / 0.8), 'Pinv = Ptotal / FU');
 assert(offGrid.inverterSuggestedKw === 8, `Inversor comercial esperado 8 kW, veio ${offGrid.inverterSuggestedKw}`);
 assert(almostEqual(offGrid.transformerW, offGrid.power127W / 0.7), 'Trafo com 30% de folga');
@@ -255,8 +257,31 @@ const noDod = calculateOffGridLoad({ ...offGridBase, useDod: false });
 assert(almostEqual(noDod.batteryGrossWh, energyWh, 0.02), 'Sem DoD a capacidade bruta é a energia útil');
 assert(noDod.dodApplied === null, 'DoD ignorado');
 
-const tri = calculateOffGridLoad({ ...offGridBase, system: 'triphasic' });
+const tri = calculateOffGridLoad({ ...offGridBase, supply: 'triphasic' });
 assert(almostEqual(tri.powerTotalW, (20 + 15 + 40) * 127), 'Ptotal trifásico soma fase C');
+assert(tri.transformerStatus === 'required', 'Trifásico com saída 220 V monofásica exige autotransformador');
+const tri380 = calculateOffGridLoad({ ...offGridBase, supply: 'triphasic', triPair: '220_380' });
+assert(tri380.voltageFn === 220 && tri380.voltageFf === 380, 'Trifásico 220/380 usa essas tensões');
+assert(almostEqual(tri380.powerTotalW, (20 + 15 + 40) * 220), 'Ptotal no padrão 220/380 usa Vfn 220');
+assert(almostEqual(tri380.power127W, 8 * 220), 'Parcela do neutro no 220/380 é Ineutro × 220');
+const zeroNeutral = calculateOffGridLoad({ ...offGridBase, currentNeutral: 0 });
+assert(zeroNeutral.transformerStatus === 'required', 'Card do trafo permanece obrigatório com neutro zerado');
+assert(zeroNeutral.transformerSuggestedKva === 0, 'Sem corrente de neutro o trafo calculado é 0 kVA');
+const mono127 = calculateOffGridLoad({
+  ...offGridBase,
+  supply: 'mono',
+  monoVoltage: 127,
+  currentA: 10,
+  currentB: 99,
+  currentNeutral: 50,
+});
+assert(almostEqual(mono127.powerTotalW, 10 * 127), 'Monofásico 127 V usa só a fase A');
+assert(mono127.power220W === 0, 'Monofásico 127 V não inventa carga 220 V');
+assert(mono127.transformerStatus === 'not_applicable', 'Padrão monofásico dispensa o card do trafo');
+const mono220 = calculateOffGridLoad({ ...offGridBase, supply: 'mono', monoVoltage: 220, currentA: 10 });
+assert(almostEqual(mono220.powerTotalW, 10 * 220), 'Monofásico 220 V multiplica a fase A por 220');
+assert(mono220.power127W === 0, 'Monofásico 220 V não inventa carga 127 V');
+assert(mono220.transformerStatus === 'not_applicable', 'Saída monofásica com rede monofásica não pede trafo');
 
 const stationary48 = calculateOffGridLoad({
   ...offGridBase,
@@ -335,11 +360,17 @@ assert(report.includes('Inversor Recomendado'), 'Relatório nomeia o inversor re
 assert(report.includes('Montagem:'), 'Relatório traz o guia de montagem');
 assert(report.includes(FIELD_HELP.neutral), 'Relatório inclui a explicação do neutro');
 assert(report.includes(FIELD_HELP.mono220), 'Relatório inclui a ajuda da saída 220V');
+assert(report.includes(FIELD_HELP.supplyBi), 'Relatório inclui a ajuda do padrão bifásico');
+assert(report.includes('Autotransformador de Apoio Necessário'), 'Relatório cita o trafo quando a interseção exige');
 const split = calculateOffGridLoad({ ...offGridBase, acOutput: 'split_phase' });
-assert(split.transformerStatus === 'split_phase', 'Bifásico nativo dispensa autotransformador');
+assert(split.transformerStatus === 'native_neutral', 'Bifásico nativo dispensa autotransformador');
 assert(split.transformerSuggestedKva === 0, 'Sem kVA de trafo na saída bifásica');
+const splitReport = buildOffGridReportHtml({ ...offGridBase, acOutput: 'split_phase' }, split);
+assert(splitReport.includes(FIELD_HELP.nativeNeutral), 'PDF repete o aviso de neutro nativo');
 const triOut = calculateOffGridLoad({ ...offGridBase, acOutput: 'triphasic' });
-assert(triOut.transformerStatus === 'triphasic', 'Trifásico nativo dispensa autotransformador');
+assert(triOut.transformerStatus === 'native_neutral', 'Trifásico nativo dispensa autotransformador');
+const monoOut = calculateOffGridLoad({ ...offGridBase, supply: 'mono', monoVoltage: 127, currentA: 8, acOutput: 'split_phase' });
+assert(monoOut.transformerStatus === 'native_neutral', 'Saída com neutro nativo avisa mesmo no padrão monofásico');
 console.log(
   `   Off-grid 20+15 A / neutro 8 A: ${offGrid.inverterSuggestedKw} kW · ${offGrid.bank.headline}`,
 );
