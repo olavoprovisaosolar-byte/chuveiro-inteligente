@@ -13,10 +13,18 @@ import {
 } from '../calculations';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
-import { buildOffGridReportHtml, describeOutputCurrent, FIELD_HELP } from '../offGridReport';
+import {
+  buildOffGridReportHtml,
+  describeArrangementGuide,
+  describeOutputCurrent,
+  FIELD_HELP,
+  offGridReportFileName,
+  type OffGridReportMeta,
+} from '../offGridReport';
 import {
   calculateOffGridLoad,
   nextCommercialSize,
+  recommendedAcBreakerA,
   validateOffGridInput,
   type OffGridLoadInput,
 } from '../offGridLoad';
@@ -357,19 +365,48 @@ assert(inconsistent.power220W === 0, 'Carga 220 V não fica negativa');
 assert(nextCommercialSize(12, [3, 5, 8, 10, 12]) === 12, 'Porte exato não sobe de faixa');
 assert(validateOffGridInput({ ...offGridBase, currentA: 0, currentB: 0 }) !== null, 'Sem corrente de fase é inválido');
 
-const report = buildOffGridReportHtml(offGridBase, offGrid);
-assert(report.includes('8 kW') || report.includes('8kW'), 'Relatório cita o inversor sugerido');
-assert(report.includes('16x Módulos de Lítio 48V 100Ah'), 'Relatório cita o arranjo de lítio');
-assert(report.includes('Inversor Recomendado'), 'Relatório nomeia o inversor recomendado');
-assert(report.includes('Montagem:'), 'Relatório traz o guia de montagem');
+const reportMeta: OffGridReportMeta = {
+  clientName: 'João da Silva',
+  location: 'Manaus/AM',
+  surveyDate: '07/10/2026',
+};
+assert(
+  offGridReportFileName('João da Silva', '07/10/2026') === 'Relatorio_OffGrid_Joao_da_Silva_2026-10-07.pdf',
+  offGridReportFileName('João da Silva', '07/10/2026'),
+);
+assert(
+  offGridReportFileName('  Casa  nº 12  ', '7/1/2026') === 'Relatorio_OffGrid_Casa_n_12_2026-01-07.pdf',
+  offGridReportFileName('  Casa  nº 12  ', '7/1/2026'),
+);
+assert(recommendedAcBreakerA(20.2) === 32, `Disjuntor de 20,2 A esperado 32 A, veio ${recommendedAcBreakerA(20.2)}`);
+assert(
+  describeArrangementGuide(offGrid).includes('16 ramos em paralelo com 1 módulo em série'),
+  describeArrangementGuide(offGrid),
+);
+const report = buildOffGridReportHtml(offGridBase, offGrid, reportMeta);
+assert(report.includes('INVERSOR OFF-GRID 8 kW'), 'Relatório destaca o inversor');
+assert(report.includes('BANCO DE BATERIAS: 16x Módulos de Lítio 48V 100Ah'), 'Relatório destaca o banco');
+assert(report.includes('EQUIPAMENTO PRINCIPAL SELECIONADO'), 'Badge do inversor');
+assert(report.includes('ARMAZENAMENTO DE ENERGIA (BACKUP)'), 'Badge das baterias');
+assert(report.includes('João da Silva'), 'Relatório cita o cliente');
+assert(report.includes('Manaus/AM'), 'Relatório cita a localidade');
+assert(report.includes('07/10/2026'), 'Relatório cita a data');
+assert(report.includes('Bifásico'), 'Relatório cita o padrão da rede');
+assert(report.includes('80% de uso (20% de folga técnica)'), 'Relatório explica o fator de utilização');
+assert(report.includes('20,2 A (Monofásico 220V)'), 'Relatório repete a corrente da saída monofásica');
+assert(report.includes('Disjuntor CA Recomendado: 32 A'), 'Relatório recomenda o disjuntor');
+assert(report.includes('Arranjo:'), 'Relatório traz o guia de arranjo');
 assert(report.includes(FIELD_HELP.neutral), 'Relatório inclui a explicação do neutro');
 assert(report.includes(FIELD_HELP.mono220), 'Relatório inclui a ajuda da saída 220V');
 assert(report.includes(FIELD_HELP.supplyBi), 'Relatório inclui a ajuda do padrão bifásico');
-assert(report.includes('Autotransformador de Apoio Necessário'), 'Relatório cita o trafo quando a interseção exige');
-assert(
-  report.includes('Corrente Nominal de Saída: 20,2 A (Monofásico 220V)'),
-  'Relatório repete a corrente da saída monofásica',
-);
+assert(report.includes('AUTOTRANSFORMADOR DE APOIO 127V/220V: 1,5 kVA'), 'Relatório cita o trafo quando a interseção exige');
+assert(report.includes('Desenvolvido via Calculadora Solar — Diagnóstico Eletrotécnico'), 'Rodapé da calculadora');
+assert(report.includes('Página 1 de 1'), 'Rodapé da página');
+assert(report.includes('Documento Técnico para Fins de Dimensionamento'), 'Rodapé do documento');
+assert(report.includes('break-inside: avoid'), 'Cards não quebram no meio da página');
+assert(report.includes('#1E3A8A'), 'Cabeçalhos em azul navy');
+assert(report.includes('#059669'), 'Destaque verde do inversor');
+assert(report.includes('#4F46E5'), 'Destaque indigo das baterias');
 const split = calculateOffGridLoad({ ...offGridBase, acOutput: 'split_phase' });
 assert(split.transformerStatus === 'native_neutral', 'Bifásico nativo dispensa autotransformador');
 assert(split.transformerSuggestedKva === 0, 'Sem kVA de trafo na saída bifásica');
@@ -382,7 +419,7 @@ assert(
     'Corrente Nominal de Saída: 17,5 A por Fase (127V/220V)',
   describeOutputCurrent({ ...offGridBase, acOutput: 'split_phase' }, split),
 );
-const splitReport = buildOffGridReportHtml({ ...offGridBase, acOutput: 'split_phase' }, split);
+const splitReport = buildOffGridReportHtml({ ...offGridBase, acOutput: 'split_phase' }, split, reportMeta);
 assert(splitReport.includes(FIELD_HELP.nativeNeutral), 'PDF repete o aviso de neutro nativo');
 const triOut = calculateOffGridLoad({ ...offGridBase, acOutput: 'triphasic' });
 assert(triOut.transformerStatus === 'native_neutral', 'Trifásico nativo dispensa autotransformador');

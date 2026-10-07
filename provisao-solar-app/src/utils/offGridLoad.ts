@@ -26,6 +26,9 @@ export const COMMERCIAL_INVERTER_KW = [3, 5, 8, 10, 12, 15, 20, 25, 30, 40, 50] 
 /** Portes comerciais de autotransformador (kVA). */
 export const COMMERCIAL_TRAFO_KVA = [1, 1.5, 2, 3, 5, 7.5, 10, 15, 20, 30, 45, 75] as const;
 
+/** Disjuntores CA comerciais (A), do menor para o maior. */
+export const AC_BREAKER_A = [6, 10, 16, 20, 25, 32, 40, 50, 63, 70, 80, 100, 125, 150, 160, 200, 250] as const;
+
 /** Folga de 30% no trafo: P_trafo = P_127 / 0,70. */
 export const TRAFO_LOAD_FACTOR = 0.7;
 
@@ -200,6 +203,15 @@ export function nominalOutputCurrentA(
     return powerW / (3 * phaseVoltage);
   }
   return powerW / 220;
+}
+
+/**
+ * Disjuntor CA imediatamente acima de 125% da corrente nominal de saída.
+ * A folga acompanha o fator de ocupação típico de 80%.
+ */
+export function recommendedAcBreakerA(currentA: number): number {
+  if (!(currentA > 0)) return 0;
+  return nextCommercialSize(currentA * 1.25, AC_BREAKER_A);
 }
 
 function ceilCount(total: number, unit: number): number {

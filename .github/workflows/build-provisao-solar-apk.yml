@@ -11,6 +11,7 @@ on:
       - cursor/packing-misto-enchimento-f794
       - cursor/levantamento-offgrid-f794
       - cursor/padrao-rede-saida-inversor-f794
+      - cursor/relatorio-pdf-executivo-f794
       - master
       - main
     paths:
