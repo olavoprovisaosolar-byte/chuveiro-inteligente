@@ -28,6 +28,7 @@ import {
   acOutputTag,
   buildOffGridReportHtml,
   describeAssembly,
+  describeOutputCurrent,
   describeTransformer,
   dodConsideredLabel,
   FIELD_HELP,
@@ -491,10 +492,9 @@ export function LevantamentoScreen() {
               label={`Carga ${loadSplitLabels(draft).high}`}
               value={`${formatNumber(result.power220W / 1000)} kW · ${formatNumber(result.share220 * 100, 0)}%`}
             />
-            <Metric
-              label={`Corrente nominal de saída em ${formatNumber(result.voltageFf, 0)} V`}
-              value={`${formatNumber(result.currentInverterA)} A`}
-            />
+            <Text style={[styles.outputCurrent, { color: colors.text, borderTopColor: colors.border }]}>
+              {describeOutputCurrent(draft, result)}
+            </Text>
             {result.neutralInconsistent ? (
               <Banner
                 tone="warning"
@@ -951,6 +951,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     marginTop: 8,
+  },
+  outputCurrent: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   metric: {
     borderTopWidth: StyleSheet.hairlineWidth,

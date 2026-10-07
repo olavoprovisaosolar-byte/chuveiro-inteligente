@@ -91,6 +91,18 @@ function pct(fraction: number): string {
   return `${formatNumber(fraction * 100, 1)}%`;
 }
 
+/** Frase do card de resultados, também repetida no PDF. */
+export function describeOutputCurrent(input: OffGridLoadInput, result: OffGridLoadResult): string {
+  const amps = formatNumber(result.currentInverterA);
+  if (input.acOutput === 'triphasic') {
+    return `Corrente Nominal de Saída: ${amps} A por Fase (Trifásico)`;
+  }
+  if (input.acOutput === 'split_phase') {
+    return `Corrente Nominal de Saída: ${amps} A por Fase (127V/220V)`;
+  }
+  return `Corrente Nominal de Saída: ${amps} A (Monofásico 220V)`;
+}
+
 export function describeTransformer(result: OffGridLoadResult): string {
   if (result.transformerStatus === 'native_neutral') return FIELD_HELP.nativeNeutral;
   if (result.transformerStatus === 'not_applicable') {
@@ -160,7 +172,7 @@ export function buildOffGridReportHtml(input: OffGridLoadInput, result: OffGridL
     ['Potência total', kw(result.powerTotalW)],
     [`Carga ${split.low}`, `${kw(result.power127W)} (${pct(result.share127)})`],
     [`Carga ${split.high}`, `${kw(result.power220W)} (${pct(result.share220)})`],
-    [`Corrente equivalente em ${formatNumber(voltageFf, 0)} V`, `${formatNumber(result.currentInverterA)} A`],
+    ['Corrente nominal de saída', describeOutputCurrent(input, result)],
     ['Inversor Recomendado', `${formatNumber(result.inverterSuggestedKw)} kW`],
     ['Saída AC', acOutputTag(input.acOutput)],
     ['Montagem do banco', describeAssembly(result)],

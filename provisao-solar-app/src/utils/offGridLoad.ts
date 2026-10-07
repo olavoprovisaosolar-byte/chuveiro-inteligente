@@ -187,6 +187,21 @@ export function nextCommercialSize(value: number, steps: readonly number[]): num
   return Math.ceil((value - 1e-9) / increment) * increment;
 }
 
+/** Corrente nominal que a topologia de saída precisa entregar. */
+export function nominalOutputCurrentA(
+  powerW: number,
+  acOutput: AcOutputTopology,
+  voltageFn: number,
+): number {
+  if (!(powerW > 0)) return 0;
+  if (acOutput === 'split_phase') return powerW / (2 * 127);
+  if (acOutput === 'triphasic') {
+    const phaseVoltage = voltageFn > 0 ? voltageFn : 127;
+    return powerW / (3 * phaseVoltage);
+  }
+  return powerW / 220;
+}
+
 function ceilCount(total: number, unit: number): number {
   if (!Number.isFinite(total) || total <= 1e-9 || unit <= 0) return 0;
   return Math.ceil(total / unit - 1e-9);
@@ -321,7 +336,9 @@ export function validateOffGridInput(input: OffGridLoadInput): string | null {
  * P_127 = I_neutro × V_FN
  * P_total = (Σ I_fases) × V_FN
  * P_220 = P_total − P_127
- * I_220 = P_total / V_FF
+ * Saída monofásica 220 V: I = P_total / 220
+ * Saída bifásica nativa: I por fase = P_total / (2 × 127)
+ * Saída trifásica: I por fase = P_total / (3 × V_FN)
  * P_inv = P_total / FU
  * E_Wh = P_total × horas / η_inv
  */
@@ -353,7 +370,7 @@ export function calculateOffGridLoad(input: OffGridLoadInput): OffGridLoadResult
   const share127 = powerTotalW > 0 ? chart127 / powerTotalW : 0;
   const share220 = powerTotalW > 0 ? 1 - share127 : 0;
 
-  const currentInverterA = voltageFf > 0 ? powerTotalW / voltageFf : 0;
+  const currentInverterA = nominalOutputCurrentA(powerTotalW, input.acOutput, voltageFn);
   const inverterMinW =
     input.utilizationFactor > 0 ? powerTotalW / input.utilizationFactor : 0;
   const inverterSuggestedKw = nextCommercialSize(inverterMinW / 1000, COMMERCIAL_INVERTER_KW);
