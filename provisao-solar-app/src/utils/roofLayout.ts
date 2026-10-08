@@ -1,10 +1,16 @@
 import {
+  DEFAULT_CORRIDOR_EVERY_ROWS,
+  DEFAULT_CORRIDOR_WIDTH_M,
   DEFAULT_EDGE_MARGIN_M,
   DEFAULT_END_CLAMP_M,
   DEFAULT_PANEL_GAP_M,
+  END_CLAMP_MAX_M,
+  END_CLAMP_MIN_M,
   KWH_PER_KWP_MONTH,
 } from '../constants/modules';
 import {
+  LayoutCorridorBand,
+  MaintenanceCorridorConfig,
   PanelOrientation,
   PanelPlacement,
   Point2D,
@@ -78,6 +84,7 @@ function toOption(params: {
   module: SolarModule;
   polygon: Point2D[];
   obstacles: RoofObstacle[];
+  corridors?: LayoutCorridorBand[];
 }): RoofLayoutOption {
   const panelCount = params.placements.length;
   const totalPowerKwp = round2((panelCount * params.module.powerWp) / 1000);
@@ -97,11 +104,50 @@ function toOption(params: {
     totalRoofAreaM2: round2(params.totalRoofAreaM2),
     usefulAreaM2: round2(params.usefulAreaM2),
     placements: params.placements,
+    corridors: params.corridors ?? [],
     totalPowerKwp,
     estimatedMonthlyGenerationKwh: round2(totalPowerKwp * KWH_PER_KWP_MONTH),
     polygon: params.polygon,
     obstacles: params.obstacles,
   };
+}
+
+export function normalizeMaintenanceCorridor(
+  corridor?: MaintenanceCorridorConfig | null,
+): MaintenanceCorridorConfig {
+  if (!corridor?.enabled) {
+    return { enabled: false, widthM: DEFAULT_CORRIDOR_WIDTH_M, everyRows: DEFAULT_CORRIDOR_EVERY_ROWS };
+  }
+  const every = Math.min(20, Math.max(1, Math.round(corridor.everyRows || DEFAULT_CORRIDOR_EVERY_ROWS)));
+  const width =
+    Number.isFinite(corridor.widthM) && corridor.widthM > 0
+      ? corridor.widthM
+      : DEFAULT_CORRIDOR_WIDTH_M;
+  return { enabled: true, widthM: width, everyRows: every };
+}
+
+/** Mid clamp é obrigatório: 2 cm entre placas vizinhas. */
+export function rigidPanelGapM(): number {
+  return DEFAULT_PANEL_GAP_M;
+}
+
+/** End clamp fica entre 3 cm e 5 cm. */
+export function rigidEndClampM(value?: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_END_CLAMP_M;
+  return Math.min(END_CLAMP_MAX_M, Math.max(END_CLAMP_MIN_M, value as number));
+}
+
+/** Espaço depois da fileira `rowIndex0`: corredor a cada N, senão mid clamp. */
+function gapFollowingRow(
+  rowIndex0: number,
+  midGap: number,
+  corridor: MaintenanceCorridorConfig,
+): { gap: number; isCorridor: boolean } {
+  const completed = rowIndex0 + 1;
+  if (corridor.enabled && completed % corridor.everyRows === 0) {
+    return { gap: corridor.widthM, isCorridor: true };
+  }
+  return { gap: midGap, isCorridor: false };
 }
 
 function overlapsAny(
@@ -113,6 +159,25 @@ function overlapsAny(
 ): boolean {
   return rects.some(
     (o) => x < o.x + o.w && x + w > o.x && y < o.y + o.h && y + h > o.y,
+  );
+}
+
+/** Mid clamp: placas vizinhas precisam de pelo menos `gap` entre os corpos. */
+function closerThanGap(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rects: Array<{ x: number; y: number; w: number; h: number; kind?: 'panel' | 'corridor' }>,
+  gap: number,
+): boolean {
+  if (gap <= 0) return false;
+  return rects.some(
+    (o) =>
+      x < o.x + o.w + gap - 1e-9 &&
+      x + w + gap - 1e-9 > o.x &&
+      y < o.y + o.h + gap - 1e-9 &&
+      y + h + gap - 1e-9 > o.y,
   );
 }
 
@@ -171,28 +236,29 @@ function packUniformInPolygon(params: {
   gap: number;
   endClampM: number;
   edgeMarginM: number;
+  corridor: MaintenanceCorridorConfig;
   idPrefix: string;
-  /** Permite sobrescrever a banda útil (ex.: após “emprestar” folga de borda). */
-  bounds?: { startX: number; endX: number; startY: number; endY: number };
-}): { count: number; placements: PanelPlacement[] } {
+}): { count: number; placements: PanelPlacement[]; corridors: LayoutCorridorBand[] } {
   const { w: panelW, h: panelH } = panelSize(params.module, params.orientation);
-  if (panelW <= 0 || panelH <= 0) return { count: 0, placements: [] };
+  if (panelW <= 0 || panelH <= 0) return { count: 0, placements: [], corridors: [] };
 
   const box = boundingBox(params.polygon);
-  const startX = params.bounds?.startX ?? box.minX + params.edgeMarginM + params.endClampM;
-  const startY = params.bounds?.startY ?? box.minY + params.edgeMarginM;
-  const endX = params.bounds?.endX ?? box.maxX - params.edgeMarginM - params.endClampM;
-  const endY = params.bounds?.endY ?? box.maxY - params.edgeMarginM;
+  const startX = box.minX + params.edgeMarginM + params.endClampM;
+  const startY = box.minY + params.edgeMarginM;
+  const endX = box.maxX - params.edgeMarginM - params.endClampM;
+  const endY = box.maxY - params.edgeMarginM;
   const stepX = panelW + params.gap;
-  const stepY = panelH + params.gap;
 
   if (endX - startX < panelW || endY - startY < panelH) {
-    return { count: 0, placements: [] };
+    return { count: 0, placements: [], corridors: [] };
   }
 
   const placements: PanelPlacement[] = [];
+  const corridors: LayoutCorridorBand[] = [];
   let index = 0;
-  for (let y = startY; y + panelH <= endY + 1e-9; y += stepY) {
+  let y = startY;
+  let row = 0;
+  while (y + panelH <= endY + 1e-9) {
     for (let x = startX; x + panelW <= endX + 1e-9; x += stepX) {
       if (!rectInsidePolygon(x, y, panelW, panelH, params.polygon)) continue;
       if (anyObstacleHits(params.obstacles, x, y, panelW, panelH)) continue;
@@ -208,8 +274,23 @@ function packUniformInPolygon(params: {
       });
       index += 1;
     }
+    const following = gapFollowingRow(row, params.gap, params.corridor);
+    if (following.isCorridor) {
+      const bandTop = y + panelH;
+      const bandH = Math.min(following.gap, Math.max(0, endY - bandTop));
+      if (bandH > 1e-6) {
+        corridors.push({
+          x: round2(startX),
+          y: round2(bandTop),
+          width: round2(Math.max(0, endX - startX)),
+          height: round2(bandH),
+        });
+      }
+    }
+    y += panelH + following.gap;
+    row += 1;
   }
-  return { count: placements.length, placements };
+  return { count: placements.length, placements, corridors };
 }
 
 type ShelfOrient = PanelOrientation;
@@ -226,9 +307,8 @@ function packShelfMixed(params: {
   gap: number;
   endClampM: number;
   edgeMarginM: number;
-  /** Se true, pode reduzir a folga de borda o mínimo para caber +1 fileira residual. */
-  borrowEdgeForRemainder?: boolean;
-}): { count: number; placements: PanelPlacement[]; edgeUsedM: number } {
+  corridor: MaintenanceCorridorConfig;
+}): { count: number; placements: PanelPlacement[]; corridors: LayoutCorridorBand[]; edgeUsedM: number } {
   const box = boundingBox(params.polygon);
   const gap = params.gap;
 
@@ -240,7 +320,7 @@ function packShelfMixed(params: {
     const usableL = endY - startY;
     const usableW = endX - startX;
     if (usableL <= 0 || usableW <= 0) {
-      return { count: 0, placements: [] as PanelPlacement[], edgeUsedM: edgeX };
+      return { count: 0, placements: [] as PanelPlacement[], corridors: [], edgeUsedM: edgeX };
     }
 
     const sizes: Record<ShelfOrient, { w: number; h: number }> = {
@@ -260,54 +340,102 @@ function packShelfMixed(params: {
       }
     });
 
-    const bestCount = new Array(H + 1).fill(-1);
-    const parent: Array<{ prev: number; orient: ShelfOrient; h: number } | null> = new Array(
-      H + 1,
-    ).fill(null);
-    bestCount[0] = 0;
+    const modCount = params.corridor.enabled ? params.corridor.everyRows : 1;
+    const bestCount: number[][] = Array.from({ length: H + 1 }, () => Array(modCount).fill(-1));
+    type ShelfParent = {
+      prevH: number;
+      prevMod: number;
+      orient: ShelfOrient;
+      h: number;
+      gapBefore: number;
+      corridorBefore: boolean;
+    };
+    const parent: Array<Array<ShelfParent | null>> = Array.from({ length: H + 1 }, () =>
+      Array(modCount).fill(null),
+    );
+    bestCount[0][0] = 0;
 
     for (let h = 0; h <= H; h += 1) {
-      if (bestCount[h] < 0) continue;
-      for (const shelf of shelfHeights) {
-        const shelfMm = Math.ceil(shelf.h * scale - 1e-6);
-        const gapMm = h === 0 ? 0 : Math.ceil(gap * scale - 1e-6);
-        const next = h + gapMm + shelfMm;
-        if (next > H) continue;
-        const cand = bestCount[h] + shelf.cols;
-        // >= permite que fileiras posteriores (ex.: Horizontal na base) substituam
-        // caminhos equivalentes, privilegiando Vertical no topo + residual embaixo.
-        if (cand >= bestCount[next]) {
-          bestCount[next] = cand;
-          parent[next] = { prev: h, orient: shelf.orient, h: shelf.h };
+      for (let mod = 0; mod < modCount; mod += 1) {
+        if (bestCount[h][mod] < 0) continue;
+        for (const shelf of shelfHeights) {
+          const shelfMm = Math.ceil(shelf.h * scale - 1e-6);
+          const corridorBefore = h > 0 && params.corridor.enabled && mod === 0;
+          const gapBefore = h === 0 ? 0 : corridorBefore ? params.corridor.widthM : gap;
+          const gapMm = Math.ceil(gapBefore * scale - 1e-6);
+          const next = h + gapMm + shelfMm;
+          if (next > H) continue;
+          const nextMod = (mod + 1) % modCount;
+          const cand = bestCount[h][mod] + shelf.cols;
+          if (cand >= bestCount[next][nextMod]) {
+            bestCount[next][nextMod] = cand;
+            parent[next][nextMod] = {
+              prevH: h,
+              prevMod: mod,
+              orient: shelf.orient,
+              h: shelf.h,
+              gapBefore,
+              corridorBefore,
+            };
+          }
         }
       }
     }
 
-    // Escolhe a altura usada com maior contagem (prefere preencher mais o vão)
     let bestH = 0;
+    let bestMod = 0;
     for (let h = 0; h <= H; h += 1) {
-      if (bestCount[h] > bestCount[bestH]) bestH = h;
-      else if (bestCount[h] === bestCount[bestH] && h > bestH) bestH = h;
+      for (let mod = 0; mod < modCount; mod += 1) {
+        const count = bestCount[h][mod];
+        const best = bestCount[bestH][bestMod];
+        if (count > best || (count === best && h > bestH)) {
+          bestH = h;
+          bestMod = mod;
+        }
+      }
     }
 
-    // Reconstrói sequência de prateleiras (do fim para o início)
-    const sequence: Array<{ orient: ShelfOrient; h: number }> = [];
-    let cur = bestH;
-    while (cur > 0 && parent[cur]) {
-      const p = parent[cur]!;
-      sequence.push({ orient: p.orient, h: p.h });
-      cur = p.prev;
+    const sequence: ShelfParent[] = [];
+    let curH = bestH;
+    let curMod = bestMod;
+    while (curH > 0 && parent[curH][curMod]) {
+      const step = parent[curH][curMod]!;
+      sequence.push(step);
+      curH = step.prevH;
+      curMod = step.prevMod;
     }
     sequence.reverse();
 
-    // Materializa placements (topo → base). Se sobrar vão no fim, tenta +1 fileira residual.
     const placements: PanelPlacement[] = [];
-    const blocked: Array<{ x: number; y: number; w: number; h: number }> = [];
+    const corridors: LayoutCorridorBand[] = [];
+    const blocked: Array<{
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      kind?: 'panel' | 'corridor';
+    }> = [];
     let y = startY;
     let index = 0;
     for (let i = 0; i < sequence.length; i += 1) {
-      if (i > 0) y += gap;
-      const { orient, h: shelfH } = sequence[i];
+      const step = sequence[i];
+      if (step.corridorBefore && step.gapBefore > 1e-6) {
+        corridors.push({
+          x: round2(startX),
+          y: round2(y),
+          width: round2(Math.max(0, endX - startX)),
+          height: round2(step.gapBefore),
+        });
+        blocked.push({
+          x: startX,
+          y,
+          w: endX - startX,
+          h: step.gapBefore,
+          kind: 'corridor',
+        });
+      }
+      y += step.gapBefore;
+      const { orient, h: shelfH } = step;
       const { w: panelW, h: panelH } = sizes[orient];
       const row = packShelfRow({
         y,
@@ -325,7 +453,7 @@ function packShelfMixed(params: {
       });
       for (const p of row) {
         placements.push(p);
-        blocked.push({ x: p.x, y: p.y, w: p.width, h: p.height });
+        blocked.push({ x: p.x, y: p.y, w: p.width, h: p.height, kind: 'panel' });
       }
       index += row.length;
       y += shelfH;
@@ -356,7 +484,7 @@ function packShelfMixed(params: {
         if (row.length === 0) continue;
         for (const p of row) {
           placements.push(p);
-          blocked.push({ x: p.x, y: p.y, w: p.width, h: p.height });
+          blocked.push({ x: p.x, y: p.y, w: p.width, h: p.height, kind: 'panel' });
         }
         index += row.length;
       }
@@ -368,6 +496,18 @@ function packShelfMixed(params: {
           if (!rectInsidePolygon(sx, sy, panelW, panelH, params.polygon)) continue;
           if (anyObstacleHits(params.obstacles, sx, sy, panelW, panelH)) continue;
           if (overlapsAny(sx, sy, panelW, panelH, blocked)) continue;
+          if (
+            closerThanGap(
+              sx,
+              sy,
+              panelW,
+              panelH,
+              blocked.filter((b) => b.kind !== 'corridor'),
+              gap,
+            )
+          ) {
+            continue;
+          }
           const p: PanelPlacement = {
             id: `scan-${orient}-${index}`,
             x: round2(sx),
@@ -379,7 +519,7 @@ function packShelfMixed(params: {
             selectable: true,
           };
           placements.push(p);
-          blocked.push({ x: p.x, y: p.y, w: p.width, h: p.height });
+          blocked.push({ x: p.x, y: p.y, w: p.width, h: p.height, kind: 'panel' });
           index += 1;
         }
       }
@@ -391,47 +531,12 @@ function packShelfMixed(params: {
     return {
       count: placements.length,
       placements,
+      corridors,
       edgeUsedM: edgeX,
     };
   };
 
-  // Tentativa com a folga configurada
-  let best = tryWithEdges(params.edgeMarginM, params.edgeMarginM, params.edgeMarginM);
-
-  if (params.borrowEdgeForRemainder && params.edgeMarginM > 0) {
-    const landH = panelSize(params.module, 'landscape').h;
-    const portH = panelSize(params.module, 'portrait').h;
-    const minShelf = Math.min(landH, portH);
-    // Empresta o mínimo da folga vertical para caber +1 fileira residual
-    for (const shelfH of [landH, portH, minShelf]) {
-      const startY = box.minY + params.edgeMarginM;
-      const endY = box.maxY - params.edgeMarginM;
-      // Estima vão residual após preencher com prateleiras da outra altura
-      const otherH = shelfH === landH ? portH : landH;
-      const nOther = Math.floor((endY - startY + gap) / (otherH + gap));
-      const used =
-        nOther > 0 ? nOther * otherH + (nOther - 1) * gap : 0;
-      const leftover = endY - startY - used - (nOther > 0 ? gap : 0);
-      if (leftover + 1e-9 >= shelfH) continue; // já cabe sem emprestar
-      const shortfall = shelfH - Math.max(0, leftover);
-      if (shortfall <= 0) continue;
-      // Reduz folga inferior (e superior se preciso); pode zerar as duas bordas
-      let edgeBottom = params.edgeMarginM - shortfall;
-      let edgeTop = params.edgeMarginM;
-      if (edgeBottom < 0) {
-        edgeTop = Math.max(0, edgeTop + edgeBottom);
-        edgeBottom = 0;
-      }
-      const cand = tryWithEdges(edgeTop, edgeBottom, params.edgeMarginM);
-      if (cand.count > best.count) best = cand;
-    }
-
-    // Folga zero nas bordas: máximo absoluto (borda justamente zero)
-    const tight = tryWithEdges(0, 0, 0);
-    if (tight.count > best.count) best = tight;
-  }
-
-  return best;
+  return tryWithEdges(params.edgeMarginM, params.edgeMarginM, params.edgeMarginM);
 }
 
 /**
@@ -447,10 +552,12 @@ export function computeRoofLayouts(params: {
   edgeMarginM?: number;
   panelGapM?: number;
   endClampM?: number;
+  corridor?: MaintenanceCorridorConfig | null;
 }): RoofLayoutComputation {
   const edgeMarginM = params.edgeMarginM ?? DEFAULT_EDGE_MARGIN_M;
-  const panelGapM = params.panelGapM ?? DEFAULT_PANEL_GAP_M;
-  const endClampM = params.endClampM ?? DEFAULT_END_CLAMP_M;
+  const panelGapM = rigidPanelGapM();
+  const endClampM = rigidEndClampM(params.endClampM ?? DEFAULT_END_CLAMP_M);
+  const corridor = normalizeMaintenanceCorridor(params.corridor);
   const obstacles = params.obstacles ?? [];
 
   let polygon: Point2D[];
@@ -478,6 +585,7 @@ export function computeRoofLayouts(params: {
     gap: panelGapM,
     endClampM,
     edgeMarginM,
+    corridor,
   };
 
   const portrait = packUniformInPolygon({
@@ -491,11 +599,7 @@ export function computeRoofLayouts(params: {
     idPrefix: 'l',
   });
 
-  // Mistura por prateleiras + preenchimento da faixa inferior (com empréstimo mínimo de borda)
-  const mixed = packShelfMixed({
-    ...base,
-    borrowEdgeForRemainder: true,
-  });
+  const mixed = packShelfMixed(base);
 
   const usableW = Math.max(0, roofWidthM - 2 * edgeMarginM - 2 * endClampM);
   const usableL = Math.max(0, roofLengthM - 2 * edgeMarginM);
@@ -515,25 +619,42 @@ export function computeRoofLayouts(params: {
     obstacles,
   };
 
-  const portraitOpt = toOption({
+  const corridorArea = (bands: LayoutCorridorBand[]) =>
+    bands.reduce((sum, band) => sum + Math.max(0, band.width) * Math.max(0, band.height), 0);
+
+  const withCorridors = (
+    partial: Omit<Parameters<typeof toOption>[0], 'usefulAreaM2' | 'corridors'> & {
+      corridors: LayoutCorridorBand[];
+    },
+  ) =>
+    toOption({
+      ...partial,
+      usefulAreaM2: Math.max(0, usefulAreaM2 - corridorArea(partial.corridors)),
+      corridors: partial.corridors,
+    });
+
+  const portraitOpt = withCorridors({
     id: 'uniform-portrait',
     label: 'Arranjo padronizado (Vertical)',
     strategy: 'uniform_portrait',
     placements: portrait.placements,
+    corridors: portrait.corridors,
     ...common,
   });
-  const landscapeOpt = toOption({
+  const landscapeOpt = withCorridors({
     id: 'uniform-landscape',
     label: 'Arranjo padronizado (Horizontal)',
     strategy: 'uniform_landscape',
     placements: landscape.placements,
+    corridors: landscape.corridors,
     ...common,
   });
-  const mixedOpt = toOption({
+  const mixedOpt = withCorridors({
     id: 'mixed',
     label: 'Arranjo misto (preenche faixas)',
     strategy: 'mixed',
     placements: mixed.placements,
+    corridors: mixed.corridors,
     ...common,
   });
 
@@ -559,7 +680,7 @@ export function computeRoofLayouts(params: {
     options: [optionA, optionB],
     bestOptionId: optionA.id,
     totalRoofAreaM2: round2(totalRoofAreaM2),
-    usefulAreaM2: round2(usefulAreaM2),
+    usefulAreaM2: round2(optionA.usefulAreaM2 ?? usefulAreaM2),
   };
 }
 

@@ -43,7 +43,7 @@ const TERMS = [
   {
     term: 'Layout 2D / Arranjo',
     definition:
-      'Sub-aba do Telhado que combina dimensões do espaço com comprimento e largura da placa, testando Vertical, Horizontal e Misto para maximizar a quantidade de módulos.',
+      'Sub-aba do Telhado que desconta a folga fixa do perímetro, obstáculos e o corredor opcional, e testa Vertical, Horizontal e Misto para a quantidade máxima de placas.',
   },
 ];
 
@@ -70,7 +70,7 @@ const FORMULAS = [
   },
   {
     title: 'Layout 2D — distribuição espacial',
-    body: 'Área útil = polígono/retângulo − folga de borda − obstáculos\nMid clamp entre placas: 0,02 m\nEnd clamp nas pontas: 0,02–0,05 m\nTesta Vertical, Horizontal e Misto (evita keep-outs)\nEscolhe o arranjo com a maior quantidade de placas',
+    body: 'Área útil = polígono − folga fixa do perímetro − obstáculos − corredores\nMid clamp entre placas: 2 cm obrigatórios\nEnd clamp no fim da fileira: 3 a 5 cm\nCorredor opcional (padrão desligado): 0,60 m a cada 2 fileiras\nTesta Vertical, Horizontal e Misto\nArrastar obstáculo ou mudar o corredor recalcula placas e kWp',
   },
 ];
 

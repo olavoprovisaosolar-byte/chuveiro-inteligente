@@ -120,6 +120,21 @@ export interface RoofPolygon {
   edgeLengthsM: Array<number | null>;
 }
 
+/** Faixa de exclusão do corredor de manutenção, em metros. */
+export interface LayoutCorridorBand {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Corredor opcional inserido a cada N fileiras. */
+export interface MaintenanceCorridorConfig {
+  enabled: boolean;
+  widthM: number;
+  everyRows: number;
+}
+
 export interface RoofLayoutOption {
   id: string;
   label: string;
@@ -135,9 +150,11 @@ export interface RoofLayoutOption {
   roofLengthM: number;
   /** Área total do perímetro do telhado (m²). */
   totalRoofAreaM2?: number;
-  /** Área útil aproveitável após margens e obstáculos (m²). */
+  /** Área útil de instalação após perímetro, obstáculos e corredores (m²). */
   usefulAreaM2?: number;
   placements: PanelPlacement[];
+  /** Faixas de corredor de manutenção desenhadas entre grupos de fileiras. */
+  corridors?: LayoutCorridorBand[];
   totalPowerKwp: number;
   estimatedMonthlyGenerationKwh: number;
   polygon?: Point2D[];

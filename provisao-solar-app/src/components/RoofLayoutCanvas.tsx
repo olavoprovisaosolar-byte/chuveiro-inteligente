@@ -434,6 +434,24 @@ export function RoofLayoutCanvas({
             />
           ))}
 
+          {(option?.corridors ?? []).map((band, index) => (
+            <View
+              key={`corridor-${index}`}
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: (band.x - box.minX) * scale,
+                top: (band.y - box.minY) * scale,
+                width: Math.max(2, band.width * scale),
+                height: Math.max(2, band.height * scale),
+                backgroundColor: 'rgba(30,58,138,0.18)',
+                borderWidth: 1,
+                borderColor: '#1E3A8A',
+                zIndex: 0,
+              }}
+            />
+          ))}
+
           {/* Placas (abaixo dos obstáculos para facilitar o toque) */}
           {(option?.placements ?? []).map((panel) => {
             const isLandscape = panel.orientation === 'landscape';
@@ -500,6 +518,12 @@ export function RoofLayoutCanvas({
           <View style={[styles.swatch, { backgroundColor: 'rgba(180,40,40,0.7)' }]} />
           <Text style={styles.legendText}>Obstáculo (arrastável)</Text>
         </View>
+        {(option?.corridors?.length ?? 0) > 0 ? (
+          <View style={styles.legendItem}>
+            <View style={[styles.swatch, { backgroundColor: 'rgba(30,58,138,0.45)' }]} />
+            <Text style={styles.legendText}>Corredor</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );

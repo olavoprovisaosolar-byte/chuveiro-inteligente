@@ -62,8 +62,8 @@ function pointOnSegment(point: Point2D, a: Point2D, b: Point2D, eps = 1e-9): boo
 
 /**
  * Ray-casting point-in-polygon.
- * Pontos exatamente sobre a borda contam como dentro — necessário para
- * encaixar placas “flush” (borda zero) na margem do telhado.
+ * Pontos exatamente sobre a borda contam como dentro, para a placa
+ * encostar na folga útil sem ser rejeitada.
  */
 export function pointInPolygon(point: Point2D, vertices: Point2D[]): boolean {
   if (vertices.length < 3) return false;

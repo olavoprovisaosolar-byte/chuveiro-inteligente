@@ -12,6 +12,7 @@ on:
       - cursor/levantamento-offgrid-f794
       - cursor/padrao-rede-saida-inversor-f794
       - cursor/relatorio-pdf-executivo-f794
+      - cursor/corredor-manutencao-telhado-f794
       - master
       - main
     paths:
