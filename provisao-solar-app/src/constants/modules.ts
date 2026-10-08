@@ -118,6 +118,12 @@ export const DEFAULT_PANEL_GAP_M = 0.02;
 
 /** Folga nas pontas da fileira — grampos finais / end clamps (metros). */
 export const DEFAULT_END_CLAMP_M = 0.03;
+export const END_CLAMP_MIN_M = 0.03;
+export const END_CLAMP_MAX_M = 0.05;
+
+/** Corredor de manutenção entre grupos de fileiras. */
+export const DEFAULT_CORRIDOR_WIDTH_M = 0.6;
+export const DEFAULT_CORRIDOR_EVERY_ROWS = 2;
 
 /** Afastamento de segurança ao redor de obstáculos (metros). */
 export const DEFAULT_OBSTACLE_CLEARANCE_M = 0.4;

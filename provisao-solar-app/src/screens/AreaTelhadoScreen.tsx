@@ -265,12 +265,12 @@ function CalcPanel() {
           />
 
           <InputField
-            label="Folga de borda / manutenção (m)"
+            label="Folga do Perímetro (Borda do Telhado)"
             value={ws.edgeMarginText}
             onChangeText={ws.setEdgeMarginText}
             keyboardType="decimal-pad"
             placeholder="0,5"
-            hint="Usada no Layout 2D (padrão 0,5 m em cada borda)."
+            hint="Distância fixa obrigatória das bordas no Layout 2D (ex.: 0,5 m do beiral e da cumeeira)."
           />
 
           {ws.hasRoofGeometry && ws.bestLayout ? (
@@ -525,35 +525,101 @@ function LayoutPanel() {
 
       <Text style={[styles.section, { color: colors.text }]}>Espaçamentos mecânicos</Text>
       <InputField
-        label="Folga de borda / manutenção (m)"
+        label="Folga do Perímetro (Borda do Telhado)"
         value={ws.edgeMarginText}
         onChangeText={ws.setEdgeMarginText}
         keyboardType="decimal-pad"
         placeholder="0,5"
-        hint="Margem ao redor do perímetro do telhado."
+        hint="Distância fixa obrigatória das bordas (ex.: 0,5 m do beiral e da cumeeira)."
       />
-      <View style={styles.dimRow}>
-        <View style={styles.dimCol}>
-          <InputField
-            label="Entre placas — mid clamp (m)"
-            value={ws.panelGapText}
-            onChangeText={ws.setPanelGapText}
-            keyboardType="decimal-pad"
-            placeholder="0,02"
-            hint="Padrão 2 cm."
-          />
-        </View>
-        <View style={styles.dimCol}>
-          <InputField
-            label="Pontas — end clamp (m)"
-            value={ws.endClampText}
-            onChangeText={ws.setEndClampText}
-            keyboardType="decimal-pad"
-            placeholder="0,03"
-            hint="2 a 5 cm nas pontas."
-          />
-        </View>
+      <View
+        style={[
+          styles.fixedRule,
+          { backgroundColor: colors.primarySoft, borderColor: colors.border },
+        ]}
+      >
+        <Text style={[styles.fixedRuleTitle, { color: colors.text }]}>
+          Grampos intermediários (mid clamps)
+        </Text>
+        <Text style={[styles.sectionHint, { color: colors.textSecondary, marginBottom: 0 }]}>
+          2 cm obrigatórios entre placas vizinhas.
+        </Text>
       </View>
+      <InputField
+        label="Grampos finais — end clamp (m)"
+        value={ws.endClampText}
+        onChangeText={ws.setEndClampText}
+        keyboardType="decimal-pad"
+        placeholder="0,03"
+        hint="3 a 5 cm no fim de cada fileira."
+        error={(() => {
+          const end = parseLocaleNumber(ws.endClampText);
+          if (!Number.isFinite(end)) return undefined;
+          if (end < 0.03 || end > 0.05) {
+            return 'O cálculo usa entre 3 cm e 5 cm.';
+          }
+          return undefined;
+        })()}
+      />
+
+      <Text style={[styles.section, { color: colors.text }]}>Corredor de manutenção</Text>
+      <Pressable
+        testID="corridor-toggle"
+        onPress={() => ws.setCorridorEnabled(!ws.corridorEnabled)}
+        style={[
+          styles.obsRow,
+          {
+            backgroundColor: ws.corridorEnabled ? colors.primarySoft : colors.surface,
+            borderColor: ws.corridorEnabled ? colors.primary : colors.border,
+            marginBottom: 12,
+          },
+        ]}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: colors.text, fontFamily: 'Outfit_600SemiBold', fontSize: 14 }}>
+            Incluir Corredor de Manutenção
+          </Text>
+          <Text
+            style={{
+              color: colors.textSecondary,
+              fontFamily: 'DMSans_400Regular',
+              fontSize: 12,
+              marginTop: 2,
+            }}
+          >
+            {ws.corridorEnabled
+              ? 'Ativado — faixas livres entre grupos de fileiras'
+              : 'Desativado (padrão)'}
+          </Text>
+        </View>
+        <Text style={{ color: colors.primary, fontFamily: 'Outfit_700Bold', fontSize: 14 }}>
+          {ws.corridorEnabled ? 'SIM' : 'NÃO'}
+        </Text>
+      </Pressable>
+      {ws.corridorEnabled ? (
+        <View style={styles.dimRow}>
+          <View style={styles.dimCol}>
+            <InputField
+              label="Largura do Corredor (m)"
+              value={ws.corridorWidthText}
+              onChangeText={ws.setCorridorWidthText}
+              keyboardType="decimal-pad"
+              placeholder="0,60"
+              hint="Padrão 0,60 m."
+            />
+          </View>
+          <View style={styles.dimCol}>
+            <InputField
+              label="Frequência de Fileiras"
+              value={ws.corridorEveryText}
+              onChangeText={ws.setCorridorEveryText}
+              keyboardType="number-pad"
+              placeholder="2"
+              hint="A cada N fileiras."
+            />
+          </View>
+        </View>
+      ) : null}
 
       <Text style={[styles.section, { color: colors.text }]}>Obstáculos / exclusão</Text>
       <InputField
@@ -803,9 +869,13 @@ function LayoutPanel() {
               {formatOptimizedArrangement(ws.activeLayout ?? ws.bestLayout)}
             </Text>
             <Text style={[styles.optimizedMeta, { color: colors.textSecondary }]}>
-              Área total {formatNumber(ws.totalRoofAreaM2)} m² · útil{' '}
-              {formatNumber(ws.usefulAreaM2)} m² ·{' '}
-              {(ws.activeLayout ?? ws.bestLayout)?.panelCount ?? 0} placas ·{' '}
+              Área Total do Telhado {formatNumber(ws.totalRoofAreaM2)} m² · Área Útil de
+              Instalação{' '}
+              {formatNumber(
+                (ws.activeLayout ?? ws.bestLayout)?.usefulAreaM2 ?? ws.usefulAreaM2,
+              )}{' '}
+              m² · Total de Placas Suportadas{' '}
+              {(ws.activeLayout ?? ws.bestLayout)?.panelCount ?? 0} · Potência Total Instalada{' '}
               {formatNumber((ws.activeLayout ?? ws.bestLayout)?.totalPowerKwp ?? 0)} kWp
             </Text>
           </View>
@@ -863,16 +933,21 @@ function LayoutPanel() {
               title="Resumo do arranjo"
               rows={[
                 {
-                  label: 'Área total do telhado',
-                  value: `${formatNumber(ws.totalRoofAreaM2)} m²`,
+                  label: 'Área Total do Telhado (m²)',
+                  value: formatNumber(ws.totalRoofAreaM2),
                 },
                 {
-                  label: 'Área útil aproveitável',
-                  value: `${formatNumber(ws.usefulAreaM2)} m²`,
+                  label: 'Área Útil de Instalação (m²)',
+                  value: formatNumber(ws.activeLayout.usefulAreaM2 ?? ws.usefulAreaM2),
                 },
                 {
-                  label: 'Total de placas',
+                  label: 'Total de Placas Suportadas',
                   value: String(ws.activeLayout.panelCount),
+                  emphasize: true,
+                },
+                {
+                  label: 'Potência Total Instalada (kWp)',
+                  value: formatNumber(ws.activeLayout.totalPowerKwp),
                   emphasize: true,
                 },
                 {
@@ -884,11 +959,6 @@ function LayoutPanel() {
                   value: ws.selectedModule
                     ? `${formatNumber(ws.selectedModule.lengthM)} × ${formatNumber(ws.selectedModule.widthM)} m`
                     : '—',
-                },
-                {
-                  label: 'Potência do arranjo',
-                  value: `${formatNumber(ws.activeLayout.totalPowerKwp)} kWp`,
-                  emphasize: true,
                 },
                 {
                   label: 'Geração mensal estimada',
@@ -906,7 +976,7 @@ function LayoutPanel() {
 
       <HelpCard
         title="Como o Layout 2D otimiza?"
-        body="Arraste obstáculos pelo telhado (touch ou mouse). Ao mover, o packing recalcula Vertical/Horizontal/Misto em tempo real, contornando keep-outs com mid/end clamps."
+        body="A folga do perímetro é fixa. Mid clamps de 2 cm separam placas vizinhas e os end clamps reservam 3 a 5 cm no fim de cada fileira. Com o corredor ligado, uma faixa livre entra a cada N fileiras. Arraste um obstáculo ou mude o corredor: a malha, a contagem e o kWp recalculam na hora."
       />
     </>
   );
@@ -983,6 +1053,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 14,
+  },
+  fixedRule: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+  },
+  fixedRuleTitle: {
+    fontFamily: 'Outfit_600SemiBold',
+    fontSize: 14,
+    marginBottom: 4,
   },
   dimRow: {
     flexDirection: 'row',

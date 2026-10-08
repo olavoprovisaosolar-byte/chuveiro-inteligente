@@ -8,6 +8,8 @@ import React, {
 } from 'react';
 import {
   DEFAULT_AREA_MARGIN,
+  DEFAULT_CORRIDOR_EVERY_ROWS,
+  DEFAULT_CORRIDOR_WIDTH_M,
   DEFAULT_EDGE_MARGIN_M,
   DEFAULT_END_CLAMP_M,
   DEFAULT_OBSTACLE_CLEARANCE_M,
@@ -64,6 +66,12 @@ type RoofWorkspaceValue = {
   setEndClampText: (v: string) => void;
   panelGapText: string;
   setPanelGapText: (v: string) => void;
+  corridorEnabled: boolean;
+  setCorridorEnabled: (v: boolean) => void;
+  corridorWidthText: string;
+  setCorridorWidthText: (v: string) => void;
+  corridorEveryText: string;
+  setCorridorEveryText: (v: string) => void;
   obstacleClearanceText: string;
   setObstacleClearanceText: (v: string) => void;
   shapeMode: RoofShapeMode;
@@ -133,6 +141,9 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
   const [edgeMarginText, setEdgeMarginText] = useState(String(DEFAULT_EDGE_MARGIN_M));
   const [endClampText, setEndClampText] = useState(String(DEFAULT_END_CLAMP_M));
   const [panelGapText, setPanelGapText] = useState(String(DEFAULT_PANEL_GAP_M));
+  const [corridorEnabled, setCorridorEnabled] = useState(false);
+  const [corridorWidthText, setCorridorWidthText] = useState('0,60');
+  const [corridorEveryText, setCorridorEveryText] = useState(String(DEFAULT_CORRIDOR_EVERY_ROWS));
   const [obstacleClearanceText, setObstacleClearanceText] = useState(
     String(DEFAULT_OBSTACLE_CLEARANCE_M),
   );
@@ -242,6 +253,19 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
     const panelGapM = Number.isFinite(gap) && gap >= 0 ? gap : DEFAULT_PANEL_GAP_M;
     const end = parseLocaleNumber(endClampText);
     const endClampM = Number.isFinite(end) && end >= 0 ? end : DEFAULT_END_CLAMP_M;
+    const corridorWidth = parseLocaleNumber(corridorWidthText);
+    const corridorEvery = parseLocaleNumber(corridorEveryText);
+    const corridor = {
+      enabled: corridorEnabled,
+      widthM:
+        Number.isFinite(corridorWidth) && corridorWidth > 0
+          ? corridorWidth
+          : DEFAULT_CORRIDOR_WIDTH_M,
+      everyRows:
+        Number.isFinite(corridorEvery) && corridorEvery >= 1
+          ? Math.round(corridorEvery)
+          : DEFAULT_CORRIDOR_EVERY_ROWS,
+    };
 
     if (shapeMode === 'polygon' && polygonMeters) {
       return computeRoofLayouts({
@@ -251,6 +275,7 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
         edgeMarginM,
         panelGapM,
         endClampM,
+        corridor,
       });
     }
     return computeRoofLayouts({
@@ -261,6 +286,7 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
       edgeMarginM,
       panelGapM,
       endClampM,
+      corridor,
     });
   }, [
     selectedModule,
@@ -273,6 +299,9 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
     edgeMarginText,
     panelGapText,
     endClampText,
+    corridorEnabled,
+    corridorWidthText,
+    corridorEveryText,
   ]);
 
   const layoutOptions = liveLayouts?.options ?? [];
@@ -487,6 +516,12 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
       setEndClampText,
       panelGapText,
       setPanelGapText,
+      corridorEnabled,
+      setCorridorEnabled,
+      corridorWidthText,
+      setCorridorWidthText,
+      corridorEveryText,
+      setCorridorEveryText,
       obstacleClearanceText,
       setObstacleClearanceText,
       shapeMode,
@@ -544,6 +579,9 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
       edgeMarginText,
       endClampText,
       panelGapText,
+      corridorEnabled,
+      corridorWidthText,
+      corridorEveryText,
       obstacleClearanceText,
       shapeMode,
       draftVertices,

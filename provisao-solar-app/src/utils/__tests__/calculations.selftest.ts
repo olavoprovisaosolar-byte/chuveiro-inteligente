@@ -171,35 +171,83 @@ assert(
   'Obstáculo rotacionado reduz placas vs telhado livre',
 );
 
-// 5×8 m / folga 0,1 m: 12 verticais deixam ~0,95 m; deve emprestar borda
-// (borda zero) e encaixar +2 horizontais na faixa inferior → 14 placas.
+// 5×8 m / folga 0,1 m: a folga do perímetro é rígida (não empresta a borda).
+// End clamp 3 cm + mid clamp 2 cm → 12 placas dentro da área útil.
 const fillStrip = computeRoofLayouts({
   roofWidthM: 5,
   roofLengthM: 8,
   module: module550,
   edgeMarginM: 0.1,
-  panelGapM: 0.02,
-  endClampM: 0.03,
+  panelGapM: 0.1,
+  endClampM: 0.01,
 });
 assert(
-  fillStrip.options[0].panelCount >= 14,
-  `5×8 deve caber ≥14 com misto/borda zero, veio ${fillStrip.options[0].panelCount}`,
+  fillStrip.options[0].panelCount === 12,
+  `5×8 com folga rígida deve caber 12 placas, veio ${fillStrip.options[0].panelCount}`,
 );
-assert(
-  fillStrip.options[0].placements.some((p) => p.orientation === 'landscape'),
-  'Faixa residual deve usar placas na Horizontal',
-);
-assert(
-  fillStrip.options[0].placements.some((p) => p.orientation === 'portrait'),
-  'Arranjo misto mantém placas na Vertical',
-);
+assert(fillStrip.options[0].panelGapM === 0.02, 'Mid clamp permanece 2 cm');
+assert(fillStrip.options[0].endClampM === 0.03, 'End clamp abaixo de 3 cm sobe para 3 cm');
+const margin = 0.1;
+const endClamp = 0.03;
+for (const panel of fillStrip.options[0].placements) {
+  assert(panel.y >= margin - 1e-6, `Placa invade a folga superior y=${panel.y}`);
+  assert(
+    panel.y + panel.height <= 8 - margin + 1e-6,
+    `Placa invade a folga inferior y=${panel.y + panel.height}`,
+  );
+  assert(panel.x >= margin + endClamp - 1e-6, `Placa invade o end clamp esquerdo x=${panel.x}`);
+  assert(
+    panel.x + panel.width <= 5 - margin - endClamp + 1e-6,
+    `Placa invade o end clamp direito x=${panel.x + panel.width}`,
+  );
+}
 const stripMaxY = Math.max(
   ...fillStrip.options[0].placements.map((p) => p.y + p.height),
 );
+
+const corridorOff = computeRoofLayouts({
+  roofWidthM: 8,
+  roofLengthM: 12,
+  module: module550,
+  edgeMarginM: 0.5,
+  endClampM: 0.03,
+  corridor: { enabled: false, widthM: 0.6, everyRows: 2 },
+});
+const corridorOn = computeRoofLayouts({
+  roofWidthM: 8,
+  roofLengthM: 12,
+  module: module550,
+  edgeMarginM: 0.5,
+  endClampM: 0.03,
+  corridor: { enabled: true, widthM: 0.6, everyRows: 2 },
+});
 assert(
-  stripMaxY >= 7.99,
-  `Placas devem chegar à borda inferior (y≈8), veio ${stripMaxY}`,
+  corridorOff.options[0].panelCount === layouts.options[0].panelCount,
+  'Corredor desligado não altera a contagem',
 );
+assert(
+  corridorOn.options[0].panelCount < corridorOff.options[0].panelCount,
+  `Corredor deve reduzir placas (${corridorOn.options[0].panelCount} vs ${corridorOff.options[0].panelCount})`,
+);
+assert(
+  (corridorOn.options[0].corridors?.length ?? 0) > 0,
+  'Corredor ligado desenha faixas de exclusão',
+);
+assert(
+  corridorOn.usefulAreaM2 < corridorOff.usefulAreaM2,
+  'Área útil de instalação desconta o corredor',
+);
+const bands = corridorOn.options[0].corridors ?? [];
+const overlapsCorridor = corridorOn.options[0].placements.some((panel) =>
+  bands.some(
+    (band) =>
+      panel.x < band.x + band.width - 1e-4 &&
+      panel.x + panel.width > band.x + 1e-4 &&
+      panel.y < band.y + band.height - 1e-4 &&
+      panel.y + panel.height > band.y + 1e-4,
+  ),
+);
+assert(!overlapsCorridor, 'Nenhuma placa pode invadir o corredor de manutenção');
 
 console.log('✅ Self-test de cálculos OK');
 console.log(
@@ -210,6 +258,9 @@ console.log(
 );
 console.log(
   `   Layout 5×8 m / folga 0,1: máx ${fillStrip.options[0].panelCount} placas (${fillStrip.options[0].orientationSummary}) · base y=${stripMaxY}`,
+);
+console.log(
+  `   Corredor 8×12 a cada 2 fileiras: ${corridorOn.options[0].panelCount} placas (livre ${corridorOff.options[0].panelCount}) · útil ${corridorOn.usefulAreaM2} m²`,
 );
 
 const offGridBase: OffGridLoadInput = {
