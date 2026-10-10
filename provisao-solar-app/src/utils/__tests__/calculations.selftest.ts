@@ -283,6 +283,13 @@ assert(
   explainProviderError('openai', 'Incorrect API key provided', 401).includes('recusou a chave'),
   'Chave inválida em português',
 );
+const retiredGemini = explainProviderError(
+  'gemini',
+  'This model models/gemini-2.0-flash is no longer available. Please update your code to use models/gemini-3.8-flash for the latest features and improvements.',
+  404,
+);
+assert(retiredGemini.includes('foi desativado'), retiredGemini);
+assert(!retiredGemini.includes('no longer available'), 'Não repetir o texto cru do Gemini');
 
 const leaptonText = `As dimensões e características físicas do módulo fotovoltaico Leapton 630W (LP182210-M-66-NB) são:
 Dimensões Físicas do Módulo

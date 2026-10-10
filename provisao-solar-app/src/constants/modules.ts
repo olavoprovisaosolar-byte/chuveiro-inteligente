@@ -133,7 +133,7 @@ export const KWH_PER_KWP_MONTH = 100;
 
 export const AI_MODELS = {
   openai: 'gpt-4o-mini',
-  gemini: 'gemini-2.0-flash',
+  gemini: 'gemini-3.8-flash',
 } as const;
 
 export const FACTOR_333_EXPLANATION =

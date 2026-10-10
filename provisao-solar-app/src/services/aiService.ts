@@ -191,13 +191,17 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.2 },
+      generationConfig: {
+        thinkingConfig: { thinkingLevel: 'low' },
+      },
     }),
   });
 
   const data = (await response.json().catch(() => ({}))) as {
     error?: { message?: string };
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string; thought?: boolean }> };
+    }>;
   };
 
   if (!response.ok) {
@@ -206,7 +210,12 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
     );
   }
 
-  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  const content = parts
+    .filter((part) => part.text && !part.thought)
+    .map((part) => part.text)
+    .join('\n')
+    .trim();
   if (!content) {
     throw new Error('Resposta vazia do Gemini.');
   }
