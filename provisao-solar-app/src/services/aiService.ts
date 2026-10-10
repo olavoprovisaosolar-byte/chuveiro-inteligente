@@ -1,6 +1,7 @@
 import * as Network from 'expo-network';
 import { AI_MODELS } from '../constants/modules';
 import { AiConfig, AiProvider, AiReviewPayload, AiReviewResult } from '../types';
+import { explainProviderError } from '../utils/aiErrors';
 
 async function ensureOnline(): Promise<void> {
   const state = await Network.getNetworkStateAsync();
@@ -163,13 +164,15 @@ async function callOpenAi(apiKey: string, prompt: string): Promise<string> {
     }),
   });
 
-  const data = (await response.json()) as {
+  const data = (await response.json().catch(() => ({}))) as {
     error?: { message?: string };
     choices?: Array<{ message?: { content?: string } }>;
   };
 
   if (!response.ok) {
-    throw new Error(data.error?.message ?? `Erro OpenAI (${response.status})`);
+    throw new Error(
+      explainProviderError('openai', data.error?.message ?? '', response.status),
+    );
   }
 
   const content = data.choices?.[0]?.message?.content;
@@ -192,13 +195,15 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
     }),
   });
 
-  const data = (await response.json()) as {
+  const data = (await response.json().catch(() => ({}))) as {
     error?: { message?: string };
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
 
   if (!response.ok) {
-    throw new Error(data.error?.message ?? `Erro Gemini (${response.status})`);
+    throw new Error(
+      explainProviderError('gemini', data.error?.message ?? '', response.status),
+    );
   }
 
   const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
