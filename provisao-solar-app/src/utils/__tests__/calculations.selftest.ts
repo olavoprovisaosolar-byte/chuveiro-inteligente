@@ -11,6 +11,7 @@ import {
   computeModuleArea,
   suggestInverterRange,
 } from '../calculations';
+import { explainProviderError } from '../aiErrors';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
 import {
@@ -268,6 +269,18 @@ const overlapsCorridor = corridorOn.options[0].placements.some((panel) =>
   ),
 );
 assert(!overlapsCorridor, 'Nenhuma placa pode invadir o corredor de manutenção');
+
+const creditError = explainProviderError(
+  'openai',
+  'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.',
+  429,
+);
+assert(creditError.includes('sem créditos'), 'Erro de crédito da OpenAI em português');
+assert(!creditError.includes('You have no credits'), 'Não repetir o texto cru da OpenAI');
+assert(
+  explainProviderError('openai', 'Incorrect API key provided', 401).includes('recusou a chave'),
+  'Chave inválida em português',
+);
 
 console.log('✅ Self-test de cálculos OK');
 console.log(

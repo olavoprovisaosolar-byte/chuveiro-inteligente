@@ -156,7 +156,8 @@ export function ConfigAiScreen() {
           1. Salve uma API Key válida da OpenAI ou do Gemini.{'\n'}
           2. Teste a conexão nesta tela.{'\n'}
           3. Nas telas de resultado, toque em “Revisar Dimensionamento com IA”.{'\n'}
-          4. O parecer aparece em um card expansível na mesma tela.
+          4. O parecer aparece em um card expansível na mesma tela.{'\n'}
+          Os cálculos funcionam sem a chave. Se a OpenAI avisar que não há créditos, adicione saldo na conta ou use o Google Gemini.
         </Text>
       </View>
     </ScreenContainer>
