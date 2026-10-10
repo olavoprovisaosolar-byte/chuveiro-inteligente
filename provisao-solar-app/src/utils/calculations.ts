@@ -10,10 +10,12 @@ import {
 import {
   ConsumptionDailyResult,
   ConsumptionMonthlyResult,
+  MaintenanceCorridorConfig,
   RoofDirectResult,
   RoofInverseResult,
   SolarModule,
 } from '../types';
+import { minimumRoofForQuantity } from './roofLayout';
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -37,20 +39,31 @@ export function suggestInverterRange(powerKwp: number): {
 
 /**
  * A partir da potência necessária (kWp) e do módulo escolhido:
- * Qtd = ceil(kWp * 1000 / Wp da placa), área necessária (+ margem) e inversor.
+ * Qtd = ceil(kWp * 1000 / Wp da placa).
+ * A área necessária é o menor telhado que comporta essa quantidade
+ * com a mesma folga, os mesmos grampos e o mesmo corredor do Layout 2D.
  */
 export function calculateModulesForPower(
   requiredPowerKwp: number,
   module: SolarModule,
-  areaMargin: number = DEFAULT_AREA_MARGIN,
+  spacing?: {
+    edgeMarginM?: number;
+    endClampM?: number;
+    corridor?: MaintenanceCorridorConfig | null;
+  },
 ): {
   module: SolarModule;
   requiredPowerKwp: number;
   quantity: number;
   installedPowerKwp: number;
   grossAreaM2: number;
-  areaMargin: number;
   requiredInstallAreaM2: number;
+  roofWidthM: number;
+  roofLengthM: number;
+  layoutPanelCount: number;
+  layoutPowerKwp: number;
+  layoutUsefulAreaM2: number;
+  orientationSummary: string;
   inverterMinKw: number;
   inverterMaxKw: number;
 } {
@@ -58,7 +71,13 @@ export function calculateModulesForPower(
   const quantity = Math.max(1, Math.ceil(requiredWp / module.powerWp));
   const installedPowerKwp = round2((quantity * module.powerWp) / 1000);
   const grossAreaM2 = round2(quantity * module.areaM2);
-  const requiredInstallAreaM2 = round2(grossAreaM2 * (1 + areaMargin));
+  const fit = minimumRoofForQuantity({
+    module,
+    quantity,
+    edgeMarginM: spacing?.edgeMarginM,
+    endClampM: spacing?.endClampM,
+    corridor: spacing?.corridor,
+  });
   const inverter = suggestInverterRange(installedPowerKwp);
   return {
     module,
@@ -66,8 +85,13 @@ export function calculateModulesForPower(
     quantity,
     installedPowerKwp,
     grossAreaM2,
-    areaMargin,
-    requiredInstallAreaM2,
+    requiredInstallAreaM2: fit?.totalRoofAreaM2 ?? 0,
+    roofWidthM: fit?.roofWidthM ?? 0,
+    roofLengthM: fit?.roofLengthM ?? 0,
+    layoutPanelCount: fit?.panelCount ?? 0,
+    layoutPowerKwp: fit?.totalPowerKwp ?? 0,
+    layoutUsefulAreaM2: fit?.usefulAreaM2 ?? 0,
+    orientationSummary: fit?.orientationSummary ?? 'Sem placas',
     ...inverter,
   };
 }

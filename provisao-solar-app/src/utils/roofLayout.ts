@@ -684,6 +684,143 @@ export function computeRoofLayouts(params: {
   };
 }
 
+export type MinimumRoofFit = {
+  roofWidthM: number;
+  roofLengthM: number;
+  totalRoofAreaM2: number;
+  usefulAreaM2: number;
+  panelCount: number;
+  totalPowerKwp: number;
+  estimatedMonthlyGenerationKwh: number;
+  orientationSummary: string;
+  edgeMarginM: number;
+  panelGapM: number;
+  endClampM: number;
+};
+
+function spanForCount(count: number, panel: number, gap: number): number {
+  if (count <= 0) return 0;
+  return count * panel + Math.max(0, count - 1) * gap;
+}
+
+function lengthForRows(
+  rows: number,
+  panelH: number,
+  gap: number,
+  corridor: MaintenanceCorridorConfig,
+): number {
+  if (rows <= 0) return 0;
+  let extra = 0;
+  for (let row = 0; row < rows - 1; row += 1) {
+    extra += gapFollowingRow(row, gap, corridor).gap;
+  }
+  return rows * panelH + extra;
+}
+
+function ceilMm(value: number): number {
+  return Math.ceil((value - 1e-9) * 1000) / 1000;
+}
+
+/**
+ * Menor retângulo que comporta `quantity` placas com a mesma folga,
+ * os mesmos grampos e o mesmo corredor do Layout 2D.
+ * A contagem devolvida é a do computeRoofLayouts nesse retângulo.
+ */
+export function minimumRoofForQuantity(params: {
+  module: SolarModule;
+  quantity: number;
+  edgeMarginM?: number;
+  endClampM?: number;
+  corridor?: MaintenanceCorridorConfig | null;
+}): MinimumRoofFit | null {
+  const quantity = Math.floor(params.quantity);
+  if (!params.module || quantity <= 0) return null;
+  const edgeMarginM =
+    params.edgeMarginM != null && Number.isFinite(params.edgeMarginM) && params.edgeMarginM >= 0
+      ? params.edgeMarginM
+      : DEFAULT_EDGE_MARGIN_M;
+  const endClampM = rigidEndClampM(params.endClampM ?? DEFAULT_END_CLAMP_M);
+  const corridor = normalizeMaintenanceCorridor(params.corridor);
+  const gap = rigidPanelGapM();
+
+  const bestBox: { current: (MinimumRoofFit & { areaRaw: number }) | null } = { current: null };
+
+  const consider = (widthM: number, lengthM: number) => {
+    let layout = computeRoofLayouts({
+      roofWidthM: widthM,
+      roofLengthM: lengthM,
+      module: params.module,
+      edgeMarginM,
+      endClampM,
+      corridor,
+    });
+    let option = layout.options[0];
+    if (!option || option.panelCount < quantity) {
+      widthM = ceilMm(widthM + 0.01);
+      lengthM = ceilMm(lengthM + 0.01);
+      layout = computeRoofLayouts({
+        roofWidthM: widthM,
+        roofLengthM: lengthM,
+        module: params.module,
+        edgeMarginM,
+        endClampM,
+        corridor,
+      });
+      option = layout.options[0];
+    }
+    if (!option || option.panelCount < quantity) return;
+    const areaRaw = widthM * lengthM;
+    const candidate: MinimumRoofFit & { areaRaw: number } = {
+      roofWidthM: widthM,
+      roofLengthM: lengthM,
+      totalRoofAreaM2: layout.totalRoofAreaM2,
+      usefulAreaM2: layout.usefulAreaM2,
+      panelCount: option.panelCount,
+      totalPowerKwp: option.totalPowerKwp,
+      estimatedMonthlyGenerationKwh: option.estimatedMonthlyGenerationKwh,
+      orientationSummary: option.orientationSummary,
+      edgeMarginM,
+      panelGapM: gap,
+      endClampM,
+      areaRaw,
+    };
+    const best = bestBox.current;
+    if (
+      !best ||
+      areaRaw < best.areaRaw - 1e-6 ||
+      (Math.abs(areaRaw - best.areaRaw) <= 1e-6 && option.panelCount < best.panelCount)
+    ) {
+      bestBox.current = candidate;
+    }
+  };
+
+  (['portrait', 'landscape'] as PanelOrientation[]).forEach((orientation) => {
+    const { w, h } = panelSize(params.module, orientation);
+    for (let cols = 1; cols <= quantity; cols += 1) {
+      const rows = Math.ceil(quantity / cols);
+      const widthM = ceilMm(spanForCount(cols, w, gap) + 2 * edgeMarginM + 2 * endClampM);
+      const lengthM = ceilMm(lengthForRows(rows, h, gap, corridor) + 2 * edgeMarginM);
+      consider(widthM, lengthM);
+    }
+  });
+
+  const best = bestBox.current;
+  if (!best) return null;
+  return {
+    roofWidthM: best.roofWidthM,
+    roofLengthM: best.roofLengthM,
+    totalRoofAreaM2: best.totalRoofAreaM2,
+    usefulAreaM2: best.usefulAreaM2,
+    panelCount: best.panelCount,
+    totalPowerKwp: best.totalPowerKwp,
+    estimatedMonthlyGenerationKwh: best.estimatedMonthlyGenerationKwh,
+    orientationSummary: best.orientationSummary,
+    edgeMarginM: best.edgeMarginM,
+    panelGapM: best.panelGapM,
+    endClampM: best.endClampM,
+  };
+}
+
 /** Estimativa da faixa de margem de borda (área do anel ≈ perímetro × margem). */
 function estimateMarginBand(polygon: Point2D[], edgeMarginM: number): number {
   if (polygon.length < 2 || edgeMarginM <= 0) return 0;

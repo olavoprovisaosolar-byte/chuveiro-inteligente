@@ -73,7 +73,27 @@ const sizing = calculateModulesForPower(4.5, module550);
 assert(sizing.quantity === 9, `Qtd placas esperada 9, veio ${sizing.quantity}`);
 assert(almostEqual(sizing.installedPowerKwp, 4.95), 'Potência instalada 9x550');
 assert(almostEqual(sizing.grossAreaM2, 23.04), 'Área bruta 9x2.56');
-assert(almostEqual(sizing.requiredInstallAreaM2, 25.34), 'Área necessária +10%');
+assert(sizing.layoutPanelCount >= 9, `Telhado mínimo deve comportar ao menos 9, veio ${sizing.layoutPanelCount}`);
+assert(sizing.requiredInstallAreaM2 > sizing.grossAreaM2, 'Área do telhado mínimo inclui folga e grampos');
+const sizedLayout = computeRoofLayouts({
+  roofWidthM: sizing.roofWidthM,
+  roofLengthM: sizing.roofLengthM,
+  module: module550,
+  edgeMarginM: 0.5,
+  endClampM: 0.03,
+});
+assert(
+  sizedLayout.options[0].panelCount === sizing.layoutPanelCount,
+  `Cálculo e Telhado divergem: ${sizing.layoutPanelCount} vs ${sizedLayout.options[0].panelCount}`,
+);
+assert(
+  almostEqual(sizedLayout.options[0].totalPowerKwp, sizing.layoutPowerKwp),
+  'kWp do telhado mínimo igual nas duas abas',
+);
+assert(
+  almostEqual(sizedLayout.usefulAreaM2, sizing.layoutUsefulAreaM2),
+  'Área útil do telhado mínimo igual nas duas abas',
+);
 assert(almostEqual(sizing.inverterMinKw, 4.95 / 1.3), 'Inversor min pela potência instalada');
 
 const layouts = computeRoofLayouts({
