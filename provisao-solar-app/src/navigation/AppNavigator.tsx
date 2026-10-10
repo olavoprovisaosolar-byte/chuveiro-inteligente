@@ -30,9 +30,11 @@ export function AppNavigator() {
 
   const isLandscape = width > height;
   const isTablet = Math.min(width, height) >= 600;
-  // Tablets Android (ex.: TL10) precisam reservar a barra de navegação do sistema
-  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 0);
-  const contentHeight = isTablet ? (isLandscape ? 56 : 64) : isLandscape ? 48 : 54;
+  // Android 15 desenha por baixo da barra de gestos. Em vários tablets o inset
+  // inferior chega zerado e o menu fica cortado. 48 dp cobre a barra do sistema.
+  const androidNavFloor = Platform.OS === 'android' ? 48 : 0;
+  const bottomInset = Math.max(insets.bottom, androidNavFloor);
+  const contentHeight = isTablet ? (isLandscape ? 60 : 64) : isLandscape ? 52 : 54;
   const tabBarHeight = contentHeight + bottomInset;
 
   const navTheme = useMemo(
@@ -53,7 +55,12 @@ export function AppNavigator() {
   return (
     <NavigationContainer theme={navTheme}>
       <Tab.Navigator
-        safeAreaInsets={{ top: 0, left: 0, right: 0, bottom: 0 }}
+        safeAreaInsets={{
+          top: insets.top,
+          left: insets.left,
+          right: insets.right,
+          bottom: bottomInset,
+        }}
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarActiveTintColor: colors.primary,
@@ -71,8 +78,8 @@ export function AppNavigator() {
             height: tabBarHeight,
             minHeight: tabBarHeight,
             paddingBottom: bottomInset,
-            paddingTop: isTablet ? 8 : 4,
-            paddingHorizontal: isTablet ? 8 : 0,
+            paddingTop: isTablet ? 6 : 4,
+            paddingHorizontal: Math.max(insets.left, insets.right, isTablet ? 8 : 0),
           },
           tabBarItemStyle: {
             paddingVertical: 2,

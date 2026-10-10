@@ -43,9 +43,14 @@ export function explainProviderError(
 
   if (
     text.includes('model') &&
-    (text.includes('not found') || text.includes('does not exist') || text.includes('not available'))
+    (text.includes('not found') ||
+      text.includes('does not exist') ||
+      text.includes('no longer available') ||
+      text.includes('not available') ||
+      text.includes('is not supported'))
   ) {
-    return `O modelo da ${providerName} não está disponível para esta chave. Selecione o outro provedor ou atualize o aplicativo.`;
+    const whose = provider === 'openai' ? 'da OpenAI' : 'do Google Gemini';
+    return `O modelo ${whose} foi desativado. Atualize o aplicativo para usar o modelo atual. Os cálculos continuam funcionando sem a chave.`;
   }
 
   if (status === 429 || text.includes('rate limit')) {

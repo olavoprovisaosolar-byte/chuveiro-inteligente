@@ -16,6 +16,7 @@ on:
       - cursor/calculo-alinhado-telhado-f794
       - cursor/mensagem-credito-openai-f794
       - cursor/menu-placa-backup-f794
+      - cursor/menu-gemini-modelo-f794
       - master
       - main
     paths:
