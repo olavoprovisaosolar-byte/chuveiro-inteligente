@@ -13,6 +13,7 @@ import {
 } from '../calculations';
 import { explainProviderError } from '../aiErrors';
 import { datasheetIsComplete, parseModuleDatasheet } from '../moduleDatasheet';
+import { mergeBackups, type MergeableBackup } from '../../services/backupMerge';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
 import {
@@ -308,6 +309,42 @@ assert(
   `Moldura de alumínio, veio ${leapton.frame}`,
 );
 assert((leapton.glass ?? '').includes('Bifacial'), `Vidro bifacial, veio ${leapton.glass}`);
+
+const emptyDevice: MergeableBackup = {
+  savedAt: '2026-10-10T00:00:00.000Z',
+  modules: [],
+  roof: null,
+  offGrid: null,
+  calculation: null,
+};
+const savedDevice: MergeableBackup = {
+  savedAt: '2026-01-01T00:00:00.000Z',
+  modules: [
+    {
+      id: 'custom-leapton',
+      manufacturer: 'Leapton',
+      model: 'LP182210-M-66-NB',
+      powerWp: 630,
+      widthM: 1.13,
+      lengthM: 2.38,
+      areaM2: 2.69,
+      isCustom: true,
+    },
+  ],
+  roof: { roofWidthText: '8', roofLengthText: '12', obstacles: [] },
+  offGrid: { clientName: 'Casa', currentAText: '20', currentBText: '', currentCText: '' },
+  calculation: { input: '450' },
+};
+const pulled = mergeBackups(emptyDevice, savedDevice);
+assert(pulled.modules[0]?.model === 'LP182210-M-66-NB', 'Atualização puxa a placa salva');
+assert(pulled.calculation?.input === '450', 'Atualização puxa o consumo');
+assert(pulled.roof?.roofWidthText === '8', 'Atualização puxa o telhado');
+assert(pulled.offGrid?.clientName === 'Casa', 'Atualização puxa o cliente da carga');
+const kept = mergeBackups(savedDevice, {
+  ...emptyDevice,
+  savedAt: '2026-12-01T00:00:00.000Z',
+});
+assert(kept.modules.length === 1, 'Cópia vazia mais nova não apaga a placa');
 
 console.log('✅ Self-test de cálculos OK');
 console.log(

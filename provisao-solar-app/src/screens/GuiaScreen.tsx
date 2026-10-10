@@ -70,7 +70,7 @@ const FORMULAS = [
   },
   {
     title: 'Cadastro da placa e backup',
-    body: 'Na aba Módulos, cole as informações da placa (potência, comprimento, largura, peso, moldura e vidro). O app cadastra o modelo neste aparelho e, se houver chave, pode pedir ajuda da IA.\nPlacas, telhado, levantamento de carga e o consumo da aba Cálculo são salvos automaticamente neste aparelho.',
+    body: 'Na aba Módulos, cole as informações da placa (potência, comprimento, largura, peso, moldura e vidro). O app cadastra o modelo neste aparelho e, se houver chave, pode pedir ajuda da IA.\nPlacas, telhado, carga e consumo são salvos automaticamente. Atualizar o app recupera esses dados. Ao desinstalar, mantenha os dados do Solar Calculator quando o Android perguntar. Uma cópia fica em Download/SolarCalculator/solar-calculator-backup.json.',
   },
   {
     title: 'Layout 2D — distribuição espacial',

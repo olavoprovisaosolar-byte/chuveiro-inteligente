@@ -453,9 +453,11 @@ export function ModulosScreen() {
 
       <Text style={[styles.section, { color: colors.text }]}>Backup automático</Text>
       <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-        Placas, telhado, levantamento de carga e o consumo da aba Cálculo são gravados sozinhos
-        neste aparelho. Atualizar o app mantém esses dados. Em reinstalação, exporte o JSON e
-        restaure depois.
+        Placas, telhado, carga e o consumo são gravados sozinhos. Atualizar o aplicativo recupera
+        esses dados na hora. Ao desinstalar, o Android pergunta se os dados do Solar Calculator
+        devem ser mantidos: deixe essa opção marcada para a próxima instalação trazer tudo de volta.
+        Cada alteração também grava Download/SolarCalculator/solar-calculator-backup.json para
+        guardar no Drive.
       </Text>
       <Text style={[styles.backupCount, { color: colors.text }]}>
         Customizadas salvas: {customModules.length}

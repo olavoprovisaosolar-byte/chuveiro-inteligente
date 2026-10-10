@@ -1,6 +1,6 @@
 {
   "name": "solar-calculator",
-  "version": "1.0.33",
+  "version": "1.0.34",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
@@ -28,7 +28,8 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
-    "react-native-web": "^0.21.2"
+    "react-native-web": "^0.21.2",
+    "solar-durable-backup": "file:./modules/solar-durable-backup"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

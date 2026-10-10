@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SolarModule } from '../types';
+import { backupHasUserData, mergeBackups } from './backupMerge';
 import { normalizeModules } from './storage';
 
 export const APP_BACKUP_KEY = '@solar_calculator/app_backup_v2';
@@ -141,17 +142,33 @@ export async function loadAppBackup(): Promise<AppBackup> {
   if (memory) return memory;
   if (!loadingPromise) {
     loadingPromise = (async () => {
+      let loaded = emptyBackup();
       try {
         const raw = await AsyncStorage.getItem(APP_BACKUP_KEY);
-        if (raw) {
-          memory = parseAppBackup(raw);
-          return memory;
-        }
+        if (raw) loaded = parseAppBackup(raw);
       } catch {
         // segue para o arquivo interno
       }
-      const fromFile = await readFile();
-      memory = fromFile ?? emptyBackup();
+      if (!backupHasUserData(loaded)) {
+        const fromFile = await readFile();
+        if (fromFile) loaded = mergeBackups(loaded, fromFile);
+      }
+      const externalRaw = await readExternalBackup();
+      if (externalRaw) {
+        try {
+          const merged = mergeBackups(loaded, parseAppBackup(externalRaw));
+          if (backupHasUserData(merged)) {
+            loaded = merged;
+            await AsyncStorage.setItem(APP_BACKUP_KEY, JSON.stringify(loaded));
+          }
+        } catch {
+          // arquivo público ilegível não apaga o backup interno
+        }
+      }
+      memory = loaded;
+      if (backupHasUserData(memory)) {
+        void nudgeSystemBackup();
+      }
       return memory;
     })().finally(() => {
       loadingPromise = null;
@@ -171,9 +188,36 @@ export async function patchAppBackup(
     app: 'Solar Calculator',
     savedAt: new Date().toISOString(),
   };
-  await AsyncStorage.setItem(APP_BACKUP_KEY, JSON.stringify(memory));
+  const json = JSON.stringify(memory);
+  await AsyncStorage.setItem(APP_BACKUP_KEY, json);
   await writeFile(memory).catch(() => undefined);
+  await publishDurableCopy(json);
   return memory;
+}
+
+async function readExternalBackup(): Promise<string | null> {
+  try {
+    const durable = await import('solar-durable-backup');
+    return await durable.readPublicBackup();
+  } catch {
+    return null;
+  }
+}
+
+async function publishDurableCopy(json: string): Promise<void> {
+  try {
+    const durable = await import('solar-durable-backup');
+    await durable.writePublicBackup(json);
+    durable.requestSystemBackup();
+  } catch {
+    // a cópia interna já foi gravada
+  }
+}
+
+function nudgeSystemBackup(): void {
+  import('solar-durable-backup')
+    .then((durable) => durable.requestSystemBackup())
+    .catch(() => undefined);
 }
 
 export function subscribeAppBackup(listener: () => void): () => void {
