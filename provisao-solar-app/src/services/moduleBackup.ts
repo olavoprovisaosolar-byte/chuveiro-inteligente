@@ -3,6 +3,12 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { SolarModule } from '../types';
 import {
+  appBackupFileUri,
+  notifyAppBackupImported,
+  parseAppBackup,
+  patchAppBackup,
+} from './appBackup';
+import {
   loadCustomModules,
   mergeCustomModules,
   normalizeModules,
@@ -86,7 +92,9 @@ export async function restoreModulesFromLocalBackupIfNeeded(): Promise<SolarModu
 }
 
 export async function exportModulesBackup(modules: SolarModule[]): Promise<string> {
-  const uri = await writeLocalModulesBackup(modules);
+  await writeLocalModulesBackup(modules);
+  await patchAppBackup({ modules });
+  const uri = await appBackupFileUri();
   const canShare = await Sharing.isAvailableAsync();
   if (!canShare) {
     throw new Error(
@@ -95,7 +103,7 @@ export async function exportModulesBackup(modules: SolarModule[]): Promise<strin
   }
   await Sharing.shareAsync(uri, {
     mimeType: 'application/json',
-    dialogTitle: 'Salvar backup das placas Solar Calculator',
+    dialogTitle: 'Salvar backup do Solar Calculator',
     UTI: 'public.json',
   });
   return uri;
@@ -119,14 +127,33 @@ export async function importModulesBackupFromPicker(): Promise<{
   const raw = await FileSystem.readAsStringAsync(asset.uri, {
     encoding: FileSystem.EncodingType.UTF8,
   });
-  const incoming = parseBackupText(raw);
-  if (incoming.length === 0) {
+  const backup = parseAppBackup(raw);
+  const incoming = backup.modules;
+  if (incoming.length === 0 && !backup.roof && !backup.offGrid && !backup.calculation) {
     throw new Error('Nenhuma placa válida encontrada no arquivo.');
   }
 
   const before = await loadCustomModules();
-  const merged = await mergeCustomModules(incoming);
-  await writeLocalModulesBackup(merged);
+  const merged = incoming.length > 0 ? await mergeCustomModules(incoming) : before;
+  if (incoming.length > 0) {
+    await writeLocalModulesBackup(merged);
+  }
+
+  const record = JSON.parse(raw) as Record<string, unknown> | SolarModule[];
+  const partial: {
+    modules?: SolarModule[];
+    roof?: typeof backup.roof;
+    offGrid?: typeof backup.offGrid;
+    calculation?: typeof backup.calculation;
+  } = {};
+  if (merged.length > 0) partial.modules = merged;
+  if (record && typeof record === 'object' && !Array.isArray(record)) {
+    if (record.roof) partial.roof = backup.roof;
+    if (record.offGrid) partial.offGrid = backup.offGrid;
+    if (record.calculation) partial.calculation = backup.calculation;
+  }
+  await patchAppBackup(partial);
+  notifyAppBackupImported();
 
   return {
     modules: merged,

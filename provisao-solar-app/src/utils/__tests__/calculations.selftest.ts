@@ -12,6 +12,7 @@ import {
   suggestInverterRange,
 } from '../calculations';
 import { explainProviderError } from '../aiErrors';
+import { datasheetIsComplete, parseModuleDatasheet } from '../moduleDatasheet';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
 import {
@@ -281,6 +282,32 @@ assert(
   explainProviderError('openai', 'Incorrect API key provided', 401).includes('recusou a chave'),
   'Chave inválida em português',
 );
+
+const leaptonText = `As dimensões e características físicas do módulo fotovoltaico Leapton 630W (LP182210-M-66-NB) são:
+Dimensões Físicas do Módulo
+Comprimento: 2.382\\text{ mm} (ou 2{,}38\\text{ metros})
+Largura: 1.134\\text{ mm} (ou 1{,}13\\text{ metro})
+Espessura da Moldura (Perfil): 30\\text{ mm} (ou 3\\text{ cm})
+Área Individual da Placa: \\approx 2{,}70\\text{ m}^2 por módulo.
+Outros Dados Físicos Relevantes
+Peso: 33{,}5\\text{ kg} por módulo.
+Estrutura/Moldura: Liga de Alumínio Anodizado.
+Vidro: Vidro Duplo Bifacial (Dual Glass) temperado de 2{,}0\\text{ mm}.`;
+const leapton = parseModuleDatasheet(leaptonText);
+assert(datasheetIsComplete(leapton), 'Ficha Leapton tem potência e medidas');
+assert(leapton.manufacturer === 'Leapton', `Fabricante Leapton, veio ${leapton.manufacturer}`);
+assert(leapton.model === 'LP182210-M-66-NB', `Modelo LP182210-M-66-NB, veio ${leapton.model}`);
+assert(leapton.powerWp === 630, `Potência 630 Wp, veio ${leapton.powerWp}`);
+assert(leapton.lengthM === 2.38, `Comprimento 2,38 m, veio ${leapton.lengthM}`);
+assert(leapton.widthM === 1.13, `Largura 1,13 m, veio ${leapton.widthM}`);
+assert(leapton.thicknessMm === 30, `Espessura 30 mm, veio ${leapton.thicknessMm}`);
+assert(almostEqual(leapton.areaM2 ?? 0, 2.7, 0.001), `Área 2,70 m², veio ${leapton.areaM2}`);
+assert(almostEqual(leapton.weightKg ?? 0, 33.5, 0.001), `Peso 33,5 kg, veio ${leapton.weightKg}`);
+assert(
+  (leapton.frame ?? '').includes('Alumínio'),
+  `Moldura de alumínio, veio ${leapton.frame}`,
+);
+assert((leapton.glass ?? '').includes('Bifacial'), `Vidro bifacial, veio ${leapton.glass}`);
 
 console.log('✅ Self-test de cálculos OK');
 console.log(

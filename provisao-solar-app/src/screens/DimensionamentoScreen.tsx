@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AiReviewCard } from '../components/AiReviewCard';
 import { HelpCard } from '../components/HelpCard';
@@ -13,6 +13,7 @@ import { FACTOR_333_EXPLANATION } from '../constants/modules';
 import { useAiConfig } from '../hooks/useAiConfig';
 import { useModules } from '../hooks/useModules';
 import { useRoofWorkspace } from '../hooks/RoofWorkspaceContext';
+import { loadAppBackup, patchAppBackup, subscribeAppBackup } from '../services/appBackup';
 import { useTheme } from '../theme/ThemeContext';
 import { SolarModule } from '../types';
 import {
@@ -37,6 +38,41 @@ export function DimensionamentoScreen() {
     null,
   );
   const [dailyResult, setDailyResult] = useState<ReturnType<typeof calculateFromDaily> | null>(null);
+  const [backupReady, setBackupReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAppBackup().then((backup) => {
+      if (cancelled) return;
+      if (backup.calculation?.mode === 'monthly' || backup.calculation?.mode === 'daily') {
+        setMode(backup.calculation.mode);
+        setInput(backup.calculation.input ?? '');
+      }
+      setBackupReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!backupReady) return undefined;
+    const timer = setTimeout(() => {
+      void patchAppBackup({ calculation: { mode, input } });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [backupReady, mode, input]);
+
+  useEffect(() => {
+    return subscribeAppBackup(() => {
+      void loadAppBackup().then((backup) => {
+        if (backup.calculation?.mode === 'monthly' || backup.calculation?.mode === 'daily') {
+          setMode(backup.calculation.mode);
+          setInput(backup.calculation.input ?? '');
+        }
+      });
+    });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -45,6 +81,7 @@ export function DimensionamentoScreen() {
   );
 
   const onCalculate = () => {
+    Keyboard.dismiss();
     const value = parseLocaleNumber(input);
     if (!Number.isFinite(value) || value <= 0) {
       setError('Informe um valor numérico maior que zero.');

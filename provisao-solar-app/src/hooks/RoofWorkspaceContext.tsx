@@ -17,6 +17,12 @@ import {
 } from '../constants/modules';
 import { useModules } from '../hooks/useModules';
 import {
+  RoofWorkspaceDraft,
+  loadAppBackup,
+  patchAppBackup,
+  subscribeAppBackup,
+} from '../services/appBackup';
+import {
   MaintenanceCorridorConfig,
   ObstacleKind,
   ObstacleShape,
@@ -134,8 +140,23 @@ const RoofWorkspaceContext = createContext<RoofWorkspaceValue | undefined>(undef
 
 let obstacleSeq = 1;
 
+function asObstacles(value: unknown): RoofObstacle[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is RoofObstacle => {
+    if (!item || typeof item !== 'object') return false;
+    const obstacle = item as Partial<RoofObstacle>;
+    return (
+      typeof obstacle.id === 'string' &&
+      typeof obstacle.x === 'number' &&
+      typeof obstacle.y === 'number' &&
+      typeof obstacle.widthM === 'number' &&
+      typeof obstacle.heightM === 'number'
+    );
+  });
+}
+
 export function RoofWorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const { allModules, refresh } = useModules();
+  const { allModules, refresh, loading: modulesLoading } = useModules();
   const [subTab, setSubTab] = useState<RoofSubTab>('calc');
   const [calcMode, setCalcMode] = useState<RoofCalcMode>('inverse');
   const [selectedId, setSelectedId] = useState<string | undefined>(allModules[0]?.id);
@@ -163,12 +184,111 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
   const [calibrateEdgeIndex, setCalibrateEdgeIndex] = useState(0);
   const [obstacles, setObstacles] = useState<RoofObstacle[]>([]);
   const [selectedObstacleId, setSelectedObstacleId] = useState<string | null>(null);
+  const [backupReady, setBackupReady] = useState(false);
+
+  const applyRoofDraft = useCallback((roof: RoofWorkspaceDraft) => {
+    if (roof.selectedId) setSelectedId(roof.selectedId);
+    setQuantityText(roof.quantityText ?? '12');
+    setRoofWidthText(roof.roofWidthText ?? '');
+    setRoofLengthText(roof.roofLengthText ?? '');
+    setRoofAreaText(roof.roofAreaText ?? '40');
+    setAreaManual(Boolean(roof.areaManual));
+    setMarginText(roof.marginText ?? String(DEFAULT_AREA_MARGIN * 100));
+    setEdgeMarginText(roof.edgeMarginText ?? String(DEFAULT_EDGE_MARGIN_M));
+    setEndClampText(roof.endClampText ?? String(DEFAULT_END_CLAMP_M));
+    setPanelGapText(roof.panelGapText ?? String(DEFAULT_PANEL_GAP_M));
+    setCorridorEnabled(Boolean(roof.corridorEnabled));
+    setCorridorWidthText(roof.corridorWidthText ?? '0,60');
+    setCorridorEveryText(roof.corridorEveryText ?? String(DEFAULT_CORRIDOR_EVERY_ROWS));
+    setObstacleClearanceText(roof.obstacleClearanceText ?? String(DEFAULT_OBSTACLE_CLEARANCE_M));
+    setShapeMode(roof.shapeMode === 'polygon' ? 'polygon' : 'rectangle');
+    setDraftVertices(Array.isArray(roof.draftVertices) ? roof.draftVertices : []);
+    setPolygonClosed(Boolean(roof.polygonClosed));
+    setEdgeLengthTexts(Array.isArray(roof.edgeLengthTexts) ? roof.edgeLengthTexts : []);
+    setCalibrateEdgeIndex(
+      Number.isFinite(roof.calibrateEdgeIndex) ? roof.calibrateEdgeIndex : 0,
+    );
+    setObstacles(asObstacles(roof.obstacles));
+  }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    loadAppBackup().then((backup) => {
+      if (cancelled) return;
+      if (backup.roof) applyRoofDraft(backup.roof);
+      setBackupReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyRoofDraft]);
+
+  useEffect(() => {
+    return subscribeAppBackup(() => {
+      void loadAppBackup().then((backup) => {
+        if (backup.roof) applyRoofDraft(backup.roof);
+      });
+    });
+  }, [applyRoofDraft]);
+
+  useEffect(() => {
+    if (modulesLoading) return;
     if (!allModules.find((m) => m.id === selectedId) && allModules[0]) {
       setSelectedId(allModules[0].id);
     }
-  }, [allModules, selectedId]);
+  }, [allModules, selectedId, modulesLoading]);
+
+  useEffect(() => {
+    if (!backupReady) return undefined;
+    const timer = setTimeout(() => {
+      const roof: RoofWorkspaceDraft = {
+        selectedId,
+        quantityText,
+        roofWidthText,
+        roofLengthText,
+        roofAreaText,
+        areaManual,
+        marginText,
+        edgeMarginText,
+        endClampText,
+        panelGapText,
+        corridorEnabled,
+        corridorWidthText,
+        corridorEveryText,
+        obstacleClearanceText,
+        shapeMode,
+        draftVertices,
+        polygonClosed,
+        edgeLengthTexts,
+        calibrateEdgeIndex,
+        obstacles,
+      };
+      void patchAppBackup({ roof });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    backupReady,
+    selectedId,
+    quantityText,
+    roofWidthText,
+    roofLengthText,
+    roofAreaText,
+    areaManual,
+    marginText,
+    edgeMarginText,
+    endClampText,
+    panelGapText,
+    corridorEnabled,
+    corridorWidthText,
+    corridorEveryText,
+    obstacleClearanceText,
+    shapeMode,
+    draftVertices,
+    polygonClosed,
+    edgeLengthTexts,
+    calibrateEdgeIndex,
+    obstacles,
+  ]);
 
   const selectedModule = useMemo(
     () => allModules.find((m) => m.id === selectedId) ?? allModules[0],

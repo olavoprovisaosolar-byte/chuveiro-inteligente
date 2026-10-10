@@ -252,6 +252,46 @@ export async function reviewDimensioning(
   return extractJson(text);
 }
 
+export type ExtractedModuleFields = {
+  manufacturer?: string;
+  model?: string;
+  powerWp?: number;
+  lengthM?: number;
+  widthM?: number;
+  areaM2?: number;
+  thicknessMm?: number;
+  weightKg?: number;
+  frame?: string;
+  glass?: string;
+};
+
+export async function extractModuleFromText(
+  config: AiConfig,
+  datasheet: string,
+): Promise<ExtractedModuleFields> {
+  if (!config.apiKey.trim()) {
+    throw new Error('Informe a chave de IA na aba Config para ler a placa com IA.');
+  }
+  await ensureOnline();
+  const prompt = `Extraia os dados físicos de um módulo fotovoltaico do texto abaixo.
+Responda APENAS com JSON válido neste formato:
+{"manufacturer":"","model":"","powerWp":0,"lengthM":0,"widthM":0,"areaM2":0,"thicknessMm":0,"weightKg":0,"frame":"","glass":""}
+Regras: comprimento e largura em metros; espessura da moldura em milímetros; potência em Wp; peso em kg.
+Se um dado não existir, use 0 ou texto vazio. Não invente medidas.
+Texto da placa:
+${datasheet}`;
+  const text =
+    config.provider === 'openai'
+      ? await callOpenAi(config.apiKey, prompt)
+      : await callGemini(config.apiKey, prompt);
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) {
+    throw new Error('A IA não devolveu os dados da placa.');
+  }
+  const parsed = JSON.parse(match[0]) as ExtractedModuleFields;
+  return parsed;
+}
+
 export function providerLabel(provider: AiProvider): string {
   return provider === 'openai' ? 'OpenAI (GPT-4o-mini)' : 'Google Gemini';
 }

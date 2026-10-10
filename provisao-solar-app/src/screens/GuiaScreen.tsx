@@ -69,6 +69,10 @@ const FORMULAS = [
     body: 'A aba Cálculo do Telhado usa o mesmo arranjo do Layout 2D\nÁrea Útil = telhado − folga do perímetro − obstáculos − corredores\nQtd Máx. = placas que cabem sem invadir borda, obstáculo ou corredor\nPotência (kWp) = (Qtd × Wp) / 1000\nGeração Mensal ≈ Potência × 100 kWh/mês',
   },
   {
+    title: 'Cadastro da placa e backup',
+    body: 'Na aba Módulos, cole as informações da placa (potência, comprimento, largura, peso, moldura e vidro). O app cadastra o modelo neste aparelho e, se houver chave, pode pedir ajuda da IA.\nPlacas, telhado, levantamento de carga e o consumo da aba Cálculo são salvos automaticamente neste aparelho.',
+  },
+  {
     title: 'Layout 2D — distribuição espacial',
     body: 'Área útil = polígono − folga fixa do perímetro − obstáculos − corredores\nMid clamp entre placas: 2 cm obrigatórios\nEnd clamp no fim da fileira: 3 a 5 cm\nCorredor opcional (padrão desligado): 0,60 m a cada 2 fileiras\nTesta Vertical, Horizontal e Misto\nArrastar obstáculo ou mudar o corredor recalcula placas e kWp',
   },
