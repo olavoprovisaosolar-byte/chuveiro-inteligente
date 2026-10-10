@@ -17,6 +17,7 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 import { enableScreens } from 'react-native-screens';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ModulesProvider } from './src/hooks/ModulesContext';
+import { RoofWorkspaceProvider } from './src/hooks/RoofWorkspaceContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
 enableScreens(true);
@@ -59,7 +60,9 @@ export default function App() {
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider>
           <ModulesProvider>
-            <AppShell />
+            <RoofWorkspaceProvider>
+              <AppShell />
+            </RoofWorkspaceProvider>
           </ModulesProvider>
         </ThemeProvider>
       </SafeAreaProvider>

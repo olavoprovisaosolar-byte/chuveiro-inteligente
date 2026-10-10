@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AiReviewCard } from '../components/AiReviewCard';
@@ -9,9 +9,10 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { ResultCard } from '../components/ResultCard';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { SizingHighlights } from '../components/SizingHighlights';
-import { DEFAULT_AREA_MARGIN, FACTOR_333_EXPLANATION } from '../constants/modules';
+import { FACTOR_333_EXPLANATION } from '../constants/modules';
 import { useAiConfig } from '../hooks/useAiConfig';
 import { useModules } from '../hooks/useModules';
+import { useRoofWorkspace } from '../hooks/RoofWorkspaceContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SolarModule } from '../types';
 import {
@@ -28,6 +29,7 @@ export function DimensionamentoScreen() {
   const { colors } = useTheme();
   const { review, hasApiKey } = useAiConfig();
   const { allModules, refresh } = useModules();
+  const ws = useRoofWorkspace();
   const [mode, setMode] = useState<Mode>('monthly');
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | undefined>();
@@ -35,8 +37,6 @@ export function DimensionamentoScreen() {
     null,
   );
   const [dailyResult, setDailyResult] = useState<ReturnType<typeof calculateFromDaily> | null>(null);
-  const [selectedModuleId, setSelectedModuleId] = useState<string | undefined>(undefined);
-  const [areaMarginPercent, setAreaMarginPercent] = useState(String(DEFAULT_AREA_MARGIN * 100));
 
   useFocusEffect(
     useCallback(() => {
@@ -58,42 +58,40 @@ export function DimensionamentoScreen() {
       setDailyResult(calculateFromDaily(value));
       setMonthlyResult(null);
     }
-    // Abre a lista comercial e mantém/seleciona uma placa
-    if (allModules[0]) {
-      setSelectedModuleId((current) => current ?? allModules[0].id);
+    if (!ws.selectedId && allModules[0]) {
+      ws.setSelectedId(allModules[0].id);
     }
   };
 
   const activeResult = mode === 'monthly' ? monthlyResult : dailyResult;
   const requiredPowerKwp = activeResult?.powerKwp ?? 0;
 
-  const selectedModule = useMemo(
-    () => allModules.find((m) => m.id === selectedModuleId) ?? allModules[0],
-    [allModules, selectedModuleId],
-  );
-
-  useEffect(() => {
-    if (activeResult && selectedModule && selectedModuleId !== selectedModule.id) {
-      setSelectedModuleId(selectedModule.id);
-    }
-  }, [activeResult, selectedModule, selectedModuleId]);
-
-  const areaMargin = useMemo(() => {
-    const parsed = parseLocaleNumber(areaMarginPercent);
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed >= 100) {
-      return DEFAULT_AREA_MARGIN;
-    }
-    return parsed / 100;
-  }, [areaMarginPercent]);
+  const selectedModule = ws.selectedModule ?? allModules[0];
 
   const moduleSizing = useMemo(() => {
     if (!activeResult || !selectedModule || requiredPowerKwp <= 0) return null;
-    return calculateModulesForPower(requiredPowerKwp, selectedModule, areaMargin);
-  }, [activeResult, selectedModule, requiredPowerKwp, areaMargin]);
+    return calculateModulesForPower(requiredPowerKwp, selectedModule, {
+      edgeMarginM: ws.appliedEdgeMarginM,
+      endClampM: ws.appliedEndClampM,
+      corridor: ws.maintenanceCorridor,
+    });
+  }, [
+    activeResult,
+    selectedModule,
+    requiredPowerKwp,
+    ws.appliedEdgeMarginM,
+    ws.appliedEndClampM,
+    ws.maintenanceCorridor,
+  ]);
 
   const onSelectModule = (module: SolarModule) => {
-    setSelectedModuleId(module.id);
+    ws.setSelectedId(module.id);
   };
+
+  const roofLayout = ws.activeLayout ?? ws.bestLayout;
+  const corridorNote = ws.maintenanceCorridor.enabled
+    ? `corredor de ${formatNumber(ws.maintenanceCorridor.widthM)} m a cada ${ws.maintenanceCorridor.everyRows} fileiras`
+    : 'corredor desligado';
 
   const consumptionRows = useMemo(() => {
     if (mode === 'monthly' && monthlyResult) {
@@ -126,7 +124,6 @@ export function DimensionamentoScreen() {
 
   const highlightItems = useMemo(() => {
     if (!moduleSizing) return [];
-    const marginPct = Math.round(moduleSizing.areaMargin * 100);
     return [
       {
         label: '1 · Quantidade de placas',
@@ -136,7 +133,7 @@ export function DimensionamentoScreen() {
       {
         label: '2 · Área necessária para instalar',
         value: `${formatNumber(moduleSizing.requiredInstallAreaM2)} m²`,
-        hint: `Área bruta ${formatNumber(moduleSizing.grossAreaM2)} m² + margem ${marginPct}%`,
+        hint: `Telhado mínimo ${formatNumber(moduleSizing.roofWidthM)} × ${formatNumber(moduleSizing.roofLengthM)} m · o Layout 2D comporta ${moduleSizing.layoutPanelCount} placas`,
         accent: true,
       },
       {
@@ -163,8 +160,26 @@ export function DimensionamentoScreen() {
         value: `${formatNumber(moduleSizing.grossAreaM2)} m²`,
       },
       {
-        label: 'Área necessária (com margem)',
-        value: `${formatNumber(moduleSizing.requiredInstallAreaM2)} m²`,
+        label: 'Telhado mínimo (L × C)',
+        value: `${formatNumber(moduleSizing.roofWidthM)} × ${formatNumber(moduleSizing.roofLengthM)} m`,
+      },
+      {
+        label: 'Área Total do Telhado (m²)',
+        value: formatNumber(moduleSizing.requiredInstallAreaM2),
+        emphasize: true,
+      },
+      {
+        label: 'Área Útil de Instalação (m²)',
+        value: formatNumber(moduleSizing.layoutUsefulAreaM2),
+      },
+      {
+        label: 'Total de Placas Suportadas',
+        value: String(moduleSizing.layoutPanelCount),
+        emphasize: true,
+      },
+      {
+        label: 'Potência Total Instalada (kWp)',
+        value: formatNumber(moduleSizing.layoutPowerKwp),
         emphasize: true,
       },
       {
@@ -254,12 +269,12 @@ export function DimensionamentoScreen() {
           />
 
           <InputField
-            label="Margem de área para instalação (%)"
-            value={areaMarginPercent}
-            onChangeText={setAreaMarginPercent}
+            label="Folga do Perímetro (Borda do Telhado)"
+            value={ws.edgeMarginText}
+            onChangeText={ws.setEdgeMarginText}
             keyboardType="decimal-pad"
-            placeholder="10"
-            hint="Padrão 10%. Área necessária = área bruta das placas × (1 + margem)."
+            placeholder="0,5"
+            hint={`A mesma folga da aba Telhado. Mid clamp 2 cm, end clamp ${formatNumber(ws.appliedEndClampM)} m, ${corridorNote}.`}
           />
 
           {moduleSizing ? (
@@ -269,6 +284,31 @@ export function DimensionamentoScreen() {
                 items={highlightItems}
               />
               <ResultCard title="Detalhes do arranjo" rows={detailRows} />
+              {roofLayout ? (
+                <ResultCard
+                  title="Telhado informado na aba Telhado"
+                  rows={[
+                    {
+                      label: 'Área Total do Telhado (m²)',
+                      value: formatNumber(ws.totalRoofAreaM2),
+                    },
+                    {
+                      label: 'Área Útil de Instalação (m²)',
+                      value: formatNumber(roofLayout.usefulAreaM2 ?? ws.usefulAreaM2),
+                    },
+                    {
+                      label: 'Total de Placas Suportadas',
+                      value: String(roofLayout.panelCount),
+                      emphasize: true,
+                    },
+                    {
+                      label: 'Potência Total Instalada (kWp)',
+                      value: formatNumber(roofLayout.totalPowerKwp),
+                      emphasize: true,
+                    },
+                  ]}
+                />
+              ) : null}
             </>
           ) : null}
 

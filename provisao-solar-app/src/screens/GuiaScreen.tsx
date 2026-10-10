@@ -38,7 +38,7 @@ const TERMS = [
   {
     term: 'Área útil / margem',
     definition:
-      'Área do telhado após descontar margem de segurança (obstáculos, bordas, manutenção). Padrão: 10%.',
+      'Área em que as placas cabem de fato: telhado menos a folga fixa do perímetro, os obstáculos e o corredor de manutenção. É a mesma conta nas abas Cálculo e Telhado.',
   },
   {
     term: 'Layout 2D / Arranjo',
@@ -62,11 +62,11 @@ const FORMULAS = [
   },
   {
     title: 'Área — sistema para telhado',
-    body: 'Área Bruta = Qtd × Área Unitária\nÁrea Recomendada = Área Bruta × (1 + margem)',
+    body: 'Área Bruta = Qtd × Área Unitária\nTelhado mínimo = menor retângulo que comporta essa quantidade\ncom a folga do perímetro, mid clamp de 2 cm, end clamp de 3 a 5 cm e o corredor\nPlacas suportadas = as que o Layout 2D desenha nesse retângulo',
   },
   {
     title: 'Área — telhado para placas',
-    body: 'Área Útil = Área Telhado × (1 − margem)\nQtd Máx. = piso(Área Útil / Área Unitária)\nPotência Máx. (kWp) = (Qtd × Wp) / 1000\nGeração Mensal ≈ Potência Máx. × 100 kWh/mês',
+    body: 'A aba Cálculo do Telhado usa o mesmo arranjo do Layout 2D\nÁrea Útil = telhado − folga do perímetro − obstáculos − corredores\nQtd Máx. = placas que cabem sem invadir borda, obstáculo ou corredor\nPotência (kWp) = (Qtd × Wp) / 1000\nGeração Mensal ≈ Potência × 100 kWh/mês',
   },
   {
     title: 'Layout 2D — distribuição espacial',

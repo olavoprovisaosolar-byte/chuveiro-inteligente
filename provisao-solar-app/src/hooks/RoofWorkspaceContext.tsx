@@ -17,6 +17,7 @@ import {
 } from '../constants/modules';
 import { useModules } from '../hooks/useModules';
 import {
+  MaintenanceCorridorConfig,
   ObstacleKind,
   ObstacleShape,
   Point2D,
@@ -34,7 +35,7 @@ import {
   polygonArea,
   scalePolygonToEdge,
 } from '../utils/roofGeometry';
-import { computeRoofLayouts } from '../utils/roofLayout';
+import { computeRoofLayouts, normalizeMaintenanceCorridor, rigidEndClampM } from '../utils/roofLayout';
 
 export type RoofSubTab = 'calc' | 'layout';
 export type RoofCalcMode = 'direct' | 'inverse';
@@ -112,6 +113,12 @@ type RoofWorkspaceValue = {
   roofLength: number;
   totalRoofAreaM2: number;
   usefulAreaM2: number;
+  /** Folga de perímetro já validada, a mesma usada no Layout 2D. */
+  appliedEdgeMarginM: number;
+  /** End clamp já limitado a 3–5 cm, o mesmo usado no Layout 2D. */
+  appliedEndClampM: number;
+  /** Corredor de manutenção já normalizado, o mesmo usado no Layout 2D. */
+  maintenanceCorridor: MaintenanceCorridorConfig;
   layoutOptions: RoofLayoutOption[];
   selectedLayoutId: string | null;
   setSelectedLayoutId: (id: string) => void;
@@ -244,18 +251,20 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
     polygonMeters,
   ]);
 
-  const liveLayouts = useMemo(() => {
-    if (!selectedModule || !hasRoofGeometry) return null;
+  const appliedEdgeMarginM = useMemo(() => {
     const edge = parseLocaleNumber(edgeMarginText);
-    const edgeMarginM =
-      Number.isFinite(edge) && edge >= 0 ? edge : DEFAULT_EDGE_MARGIN_M;
-    const gap = parseLocaleNumber(panelGapText);
-    const panelGapM = Number.isFinite(gap) && gap >= 0 ? gap : DEFAULT_PANEL_GAP_M;
-    const end = parseLocaleNumber(endClampText);
-    const endClampM = Number.isFinite(end) && end >= 0 ? end : DEFAULT_END_CLAMP_M;
+    return Number.isFinite(edge) && edge >= 0 ? edge : DEFAULT_EDGE_MARGIN_M;
+  }, [edgeMarginText]);
+
+  const appliedEndClampM = useMemo(
+    () => rigidEndClampM(parseLocaleNumber(endClampText)),
+    [endClampText],
+  );
+
+  const maintenanceCorridor = useMemo(() => {
     const corridorWidth = parseLocaleNumber(corridorWidthText);
     const corridorEvery = parseLocaleNumber(corridorEveryText);
-    const corridor = {
+    return normalizeMaintenanceCorridor({
       enabled: corridorEnabled,
       widthM:
         Number.isFinite(corridorWidth) && corridorWidth > 0
@@ -265,28 +274,32 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
         Number.isFinite(corridorEvery) && corridorEvery >= 1
           ? Math.round(corridorEvery)
           : DEFAULT_CORRIDOR_EVERY_ROWS,
+    });
+  }, [corridorEnabled, corridorWidthText, corridorEveryText]);
+
+  const liveLayouts = useMemo(() => {
+    if (!selectedModule || !hasRoofGeometry) return null;
+    const gap = parseLocaleNumber(panelGapText);
+    const panelGapM = Number.isFinite(gap) && gap >= 0 ? gap : DEFAULT_PANEL_GAP_M;
+    const shared = {
+      obstacles,
+      module: selectedModule,
+      edgeMarginM: appliedEdgeMarginM,
+      panelGapM,
+      endClampM: appliedEndClampM,
+      corridor: maintenanceCorridor,
     };
 
     if (shapeMode === 'polygon' && polygonMeters) {
       return computeRoofLayouts({
         polygon: polygonMeters,
-        obstacles,
-        module: selectedModule,
-        edgeMarginM,
-        panelGapM,
-        endClampM,
-        corridor,
+        ...shared,
       });
     }
     return computeRoofLayouts({
       roofWidthM: roofWidth,
       roofLengthM: roofLength,
-      obstacles,
-      module: selectedModule,
-      edgeMarginM,
-      panelGapM,
-      endClampM,
-      corridor,
+      ...shared,
     });
   }, [
     selectedModule,
@@ -296,12 +309,10 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
     obstacles,
     roofWidth,
     roofLength,
-    edgeMarginText,
     panelGapText,
-    endClampText,
-    corridorEnabled,
-    corridorWidthText,
-    corridorEveryText,
+    appliedEdgeMarginM,
+    appliedEndClampM,
+    maintenanceCorridor,
   ]);
 
   const layoutOptions = liveLayouts?.options ?? [];
@@ -554,6 +565,9 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
       roofLength,
       totalRoofAreaM2,
       usefulAreaM2,
+      appliedEdgeMarginM,
+      appliedEndClampM,
+      maintenanceCorridor,
       layoutOptions,
       selectedLayoutId,
       setSelectedLayoutId,
@@ -610,6 +624,9 @@ export function RoofWorkspaceProvider({ children }: { children: React.ReactNode 
       roofLength,
       totalRoofAreaM2,
       usefulAreaM2,
+      appliedEdgeMarginM,
+      appliedEndClampM,
+      maintenanceCorridor,
       layoutOptions,
       selectedLayoutId,
       activeLayout,

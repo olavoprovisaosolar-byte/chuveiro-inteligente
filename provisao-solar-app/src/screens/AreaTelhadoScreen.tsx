@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AiReviewCard } from '../components/AiReviewCard';
@@ -14,19 +14,13 @@ import { useAiConfig } from '../hooks/useAiConfig';
 import {
   RoofCalcMode,
   RoofSubTab,
-  RoofWorkspaceProvider,
   useRoofWorkspace,
 } from '../hooks/RoofWorkspaceContext';
 import { useTheme } from '../theme/ThemeContext';
 import { ObstacleKind } from '../types';
-import {
-  calculateRoofDirect,
-  calculateRoofInverse,
-  formatNumber,
-  parseLocaleNumber,
-} from '../utils/calculations';
+import { formatNumber, parseLocaleNumber } from '../utils/calculations';
 import { OBSTACLE_KIND_LABELS } from '../utils/roofGeometry';
-import { formatOptimizedArrangement } from '../utils/roofLayout';
+import { formatOptimizedArrangement, minimumRoofForQuantity } from '../utils/roofLayout';
 
 function SubTabBar() {
   const { colors } = useTheme();
@@ -159,56 +153,33 @@ function CalcPanel() {
   const { colors } = useTheme();
   const { review, hasApiKey } = useAiConfig();
   const ws = useRoofWorkspace();
-  const [error, setError] = useState<string | undefined>();
-  const [directResult, setDirectResult] = useState<ReturnType<typeof calculateRoofDirect> | null>(
-    null,
-  );
-  const [inverseResult, setInverseResult] = useState<ReturnType<
-    typeof calculateRoofInverse
-  > | null>(null);
+  const layout = ws.activeLayout ?? ws.bestLayout;
 
-  const onCalculate = () => {
-    if (!ws.selectedModule) {
-      setError('Selecione um módulo.');
-      return;
-    }
-    const marginPercent = parseLocaleNumber(ws.marginText);
-    if (!Number.isFinite(marginPercent) || marginPercent < 0 || marginPercent >= 100) {
-      setError('Informe uma margem percentual entre 0 e 99%.');
-      return;
-    }
-    const margin = marginPercent / 100;
-    setError(undefined);
-
-    if (ws.calcMode === 'direct') {
-      const qty = parseLocaleNumber(ws.quantityText);
-      if (!Number.isFinite(qty) || qty <= 0) {
-        setError('Informe a quantidade de placas.');
-        return;
-      }
-      setDirectResult(calculateRoofDirect(Math.floor(qty), ws.selectedModule, margin));
-      setInverseResult(null);
-      return;
-    }
-
-    const roofArea = parseLocaleNumber(ws.roofAreaText);
-    if (!Number.isFinite(roofArea) || roofArea <= 0) {
-      setError('Informe a área disponível do telhado ou preencha largura e comprimento.');
-      return;
-    }
-
-    setInverseResult(calculateRoofInverse(roofArea, ws.selectedModule, margin));
-    setDirectResult(null);
-  };
+  const directFit = useMemo(() => {
+    if (ws.calcMode !== 'direct' || !ws.selectedModule) return null;
+    const qty = Math.floor(parseLocaleNumber(ws.quantityText));
+    if (!Number.isFinite(qty) || qty <= 0) return null;
+    return minimumRoofForQuantity({
+      module: ws.selectedModule,
+      quantity: qty,
+      edgeMarginM: ws.appliedEdgeMarginM,
+      endClampM: ws.appliedEndClampM,
+      corridor: ws.maintenanceCorridor,
+    });
+  }, [
+    ws.calcMode,
+    ws.selectedModule,
+    ws.quantityText,
+    ws.appliedEdgeMarginM,
+    ws.appliedEndClampM,
+    ws.maintenanceCorridor,
+  ]);
 
   return (
     <>
       <CalcModeBar
         mode={ws.calcMode}
-        onChange={(mode) => {
-          ws.setCalcMode(mode);
-          setError(undefined);
-        }}
+        onChange={ws.setCalcMode}
       />
 
       <ModulePicker
@@ -273,7 +244,7 @@ function CalcPanel() {
             hint="Distância fixa obrigatória das bordas no Layout 2D (ex.: 0,5 m do beiral e da cumeeira)."
           />
 
-          {ws.hasRoofGeometry && ws.bestLayout ? (
+          {layout ? (
             <Pressable
               onPress={() => ws.setSubTab('layout')}
               style={[
@@ -282,7 +253,7 @@ function CalcPanel() {
               ]}
             >
               <Text style={[styles.layoutHintTitle, { color: colors.text }]}>
-                {formatOptimizedArrangement(ws.bestLayout)}
+                {formatOptimizedArrangement(layout)}
               </Text>
               <Text style={[styles.layoutHintCta, { color: colors.primary }]}>
                 Abrir Editor de Layout 2D →
@@ -292,57 +263,65 @@ function CalcPanel() {
         </>
       )}
 
-      <InputField
-        label={
-          ws.calcMode === 'direct' ? 'Margem de segurança (%)' : 'Margem de desconto de área (%)'
-        }
-        value={ws.marginText}
-        onChangeText={ws.setMarginText}
-        keyboardType="decimal-pad"
-        placeholder="10"
-        hint="Padrão: 10% (cálculo clássico por área)."
-        error={error}
-      />
-
-      <PrimaryButton label="Calcular área" onPress={onCalculate} style={styles.cta} />
-
       <HelpCard
-        title="Cálculo elétrico e por área"
+        title="Mesmo arranjo do Layout 2D"
         body={
           ws.calcMode === 'direct'
-            ? 'Área Bruta = Qtd × Área Unitária. Área Recomendada = Área Bruta × (1 + margem). O arranjo físico das placas fica na sub-aba Layout 2D.'
-            : 'Mantenha aqui o cálculo clássico por m² (com margem %). Para o desenho dinâmico e o máximo de placas no espaço, use a sub-aba Layout 2D.'
+            ? 'O telhado mínimo usa a folga do perímetro, o mid clamp de 2 cm, o end clamp de 3 a 5 cm e o corredor, se estiver ligado. A quantidade que cabe é a mesma que o Layout 2D desenha nesse retângulo.'
+            : 'A quantidade de placas, a área útil e o kWp saem do Layout 2D. A folga do perímetro, os obstáculos e o corredor entram no mesmo cálculo.'
         }
       />
 
-      {ws.calcMode === 'direct' && directResult ? (
+      {ws.calcMode === 'direct' && directFit && ws.selectedModule ? (
         <>
           <ResultCard
             title="Do sistema para o telhado"
             rows={[
               {
                 label: 'Módulo',
-                value: `${directResult.module.powerWp} Wp · ${formatNumber(directResult.module.areaM2)} m²`,
+                value: `${ws.selectedModule.powerWp} Wp · ${formatNumber(ws.selectedModule.lengthM)} × ${formatNumber(ws.selectedModule.widthM)} m`,
+              },
+              { label: 'Quantidade solicitada', value: String(Math.floor(parseLocaleNumber(ws.quantityText))) },
+              {
+                label: 'Telhado mínimo (L × C)',
+                value: `${formatNumber(directFit.roofWidthM)} × ${formatNumber(directFit.roofLengthM)} m`,
               },
               {
-                label: 'Dimensões da placa',
-                value: `${formatNumber(directResult.module.lengthM)} × ${formatNumber(directResult.module.widthM)} m`,
+                label: 'Área Total do Telhado (m²)',
+                value: formatNumber(directFit.totalRoofAreaM2),
               },
-              { label: 'Quantidade', value: String(directResult.quantity) },
-              { label: 'Área bruta', value: `${formatNumber(directResult.grossAreaM2)} m²` },
               {
-                label: 'Área recomendada',
-                value: `${formatNumber(directResult.recommendedAreaM2)} m²`,
+                label: 'Área Útil de Instalação (m²)',
+                value: formatNumber(directFit.usefulAreaM2),
+              },
+              {
+                label: 'Total de Placas Suportadas',
+                value: String(directFit.panelCount),
                 emphasize: true,
               },
               {
-                label: 'Potência total',
-                value: `${formatNumber(directResult.totalPowerKwp)} kWp`,
+                label: 'Potência Total Instalada (kWp)',
+                value: formatNumber(directFit.totalPowerKwp),
+                emphasize: true,
+              },
+              {
+                label: 'Orientação',
+                value: directFit.orientationSummary,
               },
             ]}
           />
           <AiReviewCard
-            payload={{ kind: 'roof_direct', result: directResult }}
+            payload={{
+              kind: 'roof_direct',
+              result: {
+                quantity: directFit.panelCount,
+                module: ws.selectedModule,
+                grossAreaM2: directFit.totalRoofAreaM2,
+                safetyMargin: 0,
+                recommendedAreaM2: directFit.usefulAreaM2,
+                totalPowerKwp: directFit.totalPowerKwp,
+              },
+            }}
             onReview={review}
             disabledReason={
               hasApiKey ? undefined : 'Configure a API Key na aba Config. IA para habilitar a revisão.'
@@ -351,32 +330,52 @@ function CalcPanel() {
         </>
       ) : null}
 
-      {ws.calcMode === 'inverse' && inverseResult ? (
+      {ws.calcMode === 'inverse' && layout ? (
         <>
           <ResultCard
-            title="Cálculo clássico por área (m²)"
+            title="Telhado para placas"
             rows={[
               {
-                label: 'Área útil disponível',
-                value: `${formatNumber(inverseResult.usefulAreaM2)} m²`,
+                label: 'Área Total do Telhado (m²)',
+                value: formatNumber(ws.totalRoofAreaM2),
               },
               {
-                label: 'Qtd máxima por área',
-                value: String(inverseResult.maxModules),
+                label: 'Área Útil de Instalação (m²)',
+                value: formatNumber(layout.usefulAreaM2 ?? ws.usefulAreaM2),
+              },
+              {
+                label: 'Total de Placas Suportadas',
+                value: String(layout.panelCount),
                 emphasize: true,
               },
               {
-                label: 'Potência máxima',
-                value: `${formatNumber(inverseResult.maxPowerKwp)} kWp`,
+                label: 'Potência Total Instalada (kWp)',
+                value: formatNumber(layout.totalPowerKwp),
+                emphasize: true,
               },
               {
                 label: 'Geração mensal estimada',
-                value: `${formatNumber(inverseResult.estimatedMonthlyGenerationKwh)} kWh/mês`,
+                value: `${formatNumber(layout.estimatedMonthlyGenerationKwh)} kWh/mês`,
+              },
+              {
+                label: 'Orientação',
+                value: layout.orientationSummary,
               },
             ]}
           />
           <AiReviewCard
-            payload={{ kind: 'roof_inverse', result: inverseResult }}
+            payload={{
+              kind: 'roof_inverse',
+              result: {
+                roofAreaM2: ws.totalRoofAreaM2,
+                module: ws.selectedModule!,
+                discountMargin: 0,
+                usefulAreaM2: layout.usefulAreaM2 ?? ws.usefulAreaM2,
+                maxModules: layout.panelCount,
+                maxPowerKwp: layout.totalPowerKwp,
+                estimatedMonthlyGenerationKwh: layout.estimatedMonthlyGenerationKwh,
+              },
+            }}
             onReview={review}
             disabledReason={
               hasApiKey ? undefined : 'Configure a API Key na aba Config. IA para habilitar a revisão.'
@@ -1007,11 +1006,7 @@ function AreaTelhadoBody() {
 }
 
 export function AreaTelhadoScreen() {
-  return (
-    <RoofWorkspaceProvider>
-      <AreaTelhadoBody />
-    </RoofWorkspaceProvider>
-  );
+  return <AreaTelhadoBody />;
 }
 
 const styles = StyleSheet.create({
