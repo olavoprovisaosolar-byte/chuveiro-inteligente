@@ -2,13 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { FieldLabel } from '../components/InfoTip';
 import { InputField } from '../components/InputField';
 import { LoadShareChart } from '../components/LoadShareChart';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenContainer } from '../components/ScreenContainer';
+import { loadAppBackup, patchAppBackup, subscribeAppBackup } from '../services/appBackup';
 import { useTheme } from '../theme/ThemeContext';
 import { formatNumber, parseLocaleNumber } from '../utils/calculations';
 import {
@@ -47,8 +48,16 @@ function todayPtBr(): string {
 }
 
 const FU_STEPS = [0.6, 0.7, 0.8, 0.9] as const;
+const SUPPLY_VALUES: SupplyStandard[] = ['mono', 'biphasic', 'triphasic'];
+const AC_OUTPUT_VALUES: AcOutputTopology[] = ['mono220', 'split_phase', 'triphasic'];
+const BUS_VALUES: BusVoltageV[] = [24, 48];
+const BATTERY_IDS: BatteryModelId[] = ['li-48-100', 'li-24-100', 'st-12-240', 'st-12-150'];
 
 type AutonomyUnit = 'hours' | 'days';
+
+function isOneOf<T extends string | number>(value: unknown, options: readonly T[]): value is T {
+  return options.includes(value as T);
+}
 
 function parseNonNegative(text: string): number {
   if (text.trim() === '') return 0;
@@ -81,6 +90,127 @@ export function LevantamentoScreen() {
   const [surveyDate, setSurveyDate] = useState(todayPtBr);
   const [clientError, setClientError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [backupReady, setBackupReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const apply = (draft: NonNullable<Awaited<ReturnType<typeof loadAppBackup>>['offGrid']>) => {
+      if (isOneOf(draft.supply, SUPPLY_VALUES)) setSupply(draft.supply);
+      if (draft.monoVoltage === 127 || draft.monoVoltage === 220) setMonoVoltage(draft.monoVoltage);
+      if (draft.triPair === '127_220' || draft.triPair === '220_380') setTriPair(draft.triPair);
+      setCurrentAText(draft.currentAText ?? '');
+      setCurrentBText(draft.currentBText ?? '');
+      setCurrentCText(draft.currentCText ?? '');
+      setCurrentNeutralText(draft.currentNeutralText ?? '');
+      if (typeof draft.utilization === 'number') setUtilization(draft.utilization);
+      if (isOneOf(draft.acOutput, AC_OUTPUT_VALUES)) setAcOutput(draft.acOutput);
+      if (isOneOf(draft.inverterBus, BUS_VALUES)) setInverterBus(draft.inverterBus);
+      if (isOneOf(draft.busVoltage, BUS_VALUES)) setBusVoltage(draft.busVoltage);
+      setBusTouched(Boolean(draft.busTouched));
+      setAutonomyText(draft.autonomyText ?? '12');
+      setAutonomyUnit(draft.autonomyUnit === 'days' ? 'days' : 'hours');
+      setUseDod(draft.useDod !== false);
+      setDodText(draft.dodText ?? '80');
+      if (isOneOf(draft.batteryModelId, BATTERY_IDS)) setBatteryModelId(draft.batteryModelId);
+      setEfficiencyText(draft.efficiencyText ?? '92');
+      setClientName(draft.clientName ?? '');
+      setClientLocation(draft.clientLocation ?? '');
+      setSurveyDate(draft.surveyDate || todayPtBr());
+    };
+    loadAppBackup().then((backup) => {
+      if (cancelled) return;
+      if (backup.offGrid) apply(backup.offGrid);
+      setBackupReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!backupReady) return undefined;
+    const timer = setTimeout(() => {
+      void patchAppBackup({
+        offGrid: {
+          supply,
+          monoVoltage,
+          triPair,
+          currentAText,
+          currentBText,
+          currentCText,
+          currentNeutralText,
+          utilization,
+          acOutput,
+          inverterBus,
+          busVoltage,
+          busTouched,
+          autonomyText,
+          autonomyUnit,
+          useDod,
+          dodText,
+          batteryModelId,
+          efficiencyText,
+          clientName,
+          clientLocation,
+          surveyDate,
+        },
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    backupReady,
+    supply,
+    monoVoltage,
+    triPair,
+    currentAText,
+    currentBText,
+    currentCText,
+    currentNeutralText,
+    utilization,
+    acOutput,
+    inverterBus,
+    busVoltage,
+    busTouched,
+    autonomyText,
+    autonomyUnit,
+    useDod,
+    dodText,
+    batteryModelId,
+    efficiencyText,
+    clientName,
+    clientLocation,
+    surveyDate,
+  ]);
+
+  useEffect(() => {
+    return subscribeAppBackup(() => {
+      void loadAppBackup().then((backup) => {
+        if (!backup.offGrid) return;
+        const draft = backup.offGrid;
+        if (isOneOf(draft.supply, SUPPLY_VALUES)) setSupply(draft.supply);
+        if (draft.monoVoltage === 127 || draft.monoVoltage === 220) setMonoVoltage(draft.monoVoltage);
+        if (draft.triPair === '127_220' || draft.triPair === '220_380') setTriPair(draft.triPair);
+        if (isOneOf(draft.acOutput, AC_OUTPUT_VALUES)) setAcOutput(draft.acOutput);
+        if (isOneOf(draft.inverterBus, BUS_VALUES)) setInverterBus(draft.inverterBus);
+        if (isOneOf(draft.busVoltage, BUS_VALUES)) setBusVoltage(draft.busVoltage);
+        setBusTouched(Boolean(draft.busTouched));
+        setUseDod(draft.useDod !== false);
+        setAutonomyUnit(draft.autonomyUnit === 'days' ? 'days' : 'hours');
+        if (typeof draft.utilization === 'number') setUtilization(draft.utilization);
+        setCurrentAText(draft.currentAText ?? '');
+        setCurrentBText(draft.currentBText ?? '');
+        setCurrentCText(draft.currentCText ?? '');
+        setCurrentNeutralText(draft.currentNeutralText ?? '');
+        setClientName(draft.clientName ?? '');
+        setClientLocation(draft.clientLocation ?? '');
+        setSurveyDate(draft.surveyDate || todayPtBr());
+        setAutonomyText(draft.autonomyText ?? '12');
+        setEfficiencyText(draft.efficiencyText ?? '92');
+        setDodText(draft.dodText ?? '80');
+        if (isOneOf(draft.batteryModelId, BATTERY_IDS)) setBatteryModelId(draft.batteryModelId);
+      });
+    });
+  }, []);
 
   const draft = useMemo(() => {
     const autonomyRaw = parseLocaleNumber(autonomyText);

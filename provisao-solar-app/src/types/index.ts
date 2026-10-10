@@ -11,6 +11,16 @@ export interface SolarModule {
   lengthM: number;
   areaM2: number;
   isCustom: boolean;
+  /** Espessura da moldura, em milímetros. */
+  thicknessMm?: number;
+  /** Peso do módulo, em quilogramas. */
+  weightKg?: number;
+  /** Material da estrutura / moldura. */
+  frame?: string;
+  /** Tipo de vidro. */
+  glass?: string;
+  /** Texto livre capturado da ficha (moldura, vidro e observações). */
+  datasheetNotes?: string;
 }
 
 export interface AiConfig {

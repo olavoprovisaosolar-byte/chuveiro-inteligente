@@ -58,7 +58,7 @@ export function AppNavigator() {
           headerShown: false,
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.tabInactive,
-          tabBarHideOnKeyboard: true,
+          tabBarHideOnKeyboard: false,
           tabBarStyle: {
             backgroundColor: colors.tabBar,
             borderTopColor: colors.border,

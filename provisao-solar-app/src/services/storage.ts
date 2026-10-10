@@ -3,6 +3,16 @@ import { SolarModule } from '../types';
 
 export const CUSTOM_MODULES_KEY = '@solar_calculator/custom_modules';
 
+function optionalPositive(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function optionalText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value.trim();
+  return text ? text : undefined;
+}
+
 function normalizeModules(input: unknown): SolarModule[] {
   if (!Array.isArray(input)) return [];
   return input
@@ -18,19 +28,31 @@ function normalizeModules(input: unknown): SolarModule[] {
         typeof m.lengthM === 'number'
       );
     })
-    .map((m) => ({
-      id: m.id,
-      manufacturer: String(m.manufacturer || 'Customizado'),
-      model: String(m.model || `${m.powerWp} Wp`),
-      powerWp: m.powerWp,
-      widthM: m.widthM,
-      lengthM: m.lengthM,
-      areaM2:
-        typeof m.areaM2 === 'number' && Number.isFinite(m.areaM2)
-          ? m.areaM2
-          : Math.round(m.lengthM * m.widthM * 100) / 100,
-      isCustom: true,
-    }));
+    .map((m) => {
+      const thicknessMm = optionalPositive(m.thicknessMm);
+      const weightKg = optionalPositive(m.weightKg);
+      const frame = optionalText(m.frame);
+      const glass = optionalText(m.glass);
+      const datasheetNotes = optionalText(m.datasheetNotes);
+      return {
+        id: m.id,
+        manufacturer: String(m.manufacturer || 'Customizado'),
+        model: String(m.model || `${m.powerWp} Wp`),
+        powerWp: m.powerWp,
+        widthM: m.widthM,
+        lengthM: m.lengthM,
+        areaM2:
+          typeof m.areaM2 === 'number' && Number.isFinite(m.areaM2)
+            ? m.areaM2
+            : Math.round(m.lengthM * m.widthM * 100) / 100,
+        isCustom: true,
+        ...(thicknessMm != null ? { thicknessMm } : {}),
+        ...(weightKg != null ? { weightKg } : {}),
+        ...(frame ? { frame } : {}),
+        ...(glass ? { glass } : {}),
+        ...(datasheetNotes ? { datasheetNotes } : {}),
+      };
+    });
 }
 
 export async function loadCustomModules(): Promise<SolarModule[]> {

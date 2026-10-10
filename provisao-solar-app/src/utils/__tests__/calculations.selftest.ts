@@ -12,6 +12,8 @@ import {
   suggestInverterRange,
 } from '../calculations';
 import { explainProviderError } from '../aiErrors';
+import { datasheetIsComplete, parseModuleDatasheet } from '../moduleDatasheet';
+import { mergeBackups, type MergeableBackup } from '../../services/backupMerge';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
 import {
@@ -281,6 +283,68 @@ assert(
   explainProviderError('openai', 'Incorrect API key provided', 401).includes('recusou a chave'),
   'Chave inválida em português',
 );
+
+const leaptonText = `As dimensões e características físicas do módulo fotovoltaico Leapton 630W (LP182210-M-66-NB) são:
+Dimensões Físicas do Módulo
+Comprimento: 2.382\\text{ mm} (ou 2{,}38\\text{ metros})
+Largura: 1.134\\text{ mm} (ou 1{,}13\\text{ metro})
+Espessura da Moldura (Perfil): 30\\text{ mm} (ou 3\\text{ cm})
+Área Individual da Placa: \\approx 2{,}70\\text{ m}^2 por módulo.
+Outros Dados Físicos Relevantes
+Peso: 33{,}5\\text{ kg} por módulo.
+Estrutura/Moldura: Liga de Alumínio Anodizado.
+Vidro: Vidro Duplo Bifacial (Dual Glass) temperado de 2{,}0\\text{ mm}.`;
+const leapton = parseModuleDatasheet(leaptonText);
+assert(datasheetIsComplete(leapton), 'Ficha Leapton tem potência e medidas');
+assert(leapton.manufacturer === 'Leapton', `Fabricante Leapton, veio ${leapton.manufacturer}`);
+assert(leapton.model === 'LP182210-M-66-NB', `Modelo LP182210-M-66-NB, veio ${leapton.model}`);
+assert(leapton.powerWp === 630, `Potência 630 Wp, veio ${leapton.powerWp}`);
+assert(leapton.lengthM === 2.38, `Comprimento 2,38 m, veio ${leapton.lengthM}`);
+assert(leapton.widthM === 1.13, `Largura 1,13 m, veio ${leapton.widthM}`);
+assert(leapton.thicknessMm === 30, `Espessura 30 mm, veio ${leapton.thicknessMm}`);
+assert(almostEqual(leapton.areaM2 ?? 0, 2.7, 0.001), `Área 2,70 m², veio ${leapton.areaM2}`);
+assert(almostEqual(leapton.weightKg ?? 0, 33.5, 0.001), `Peso 33,5 kg, veio ${leapton.weightKg}`);
+assert(
+  (leapton.frame ?? '').includes('Alumínio'),
+  `Moldura de alumínio, veio ${leapton.frame}`,
+);
+assert((leapton.glass ?? '').includes('Bifacial'), `Vidro bifacial, veio ${leapton.glass}`);
+
+const emptyDevice: MergeableBackup = {
+  savedAt: '2026-10-10T00:00:00.000Z',
+  modules: [],
+  roof: null,
+  offGrid: null,
+  calculation: null,
+};
+const savedDevice: MergeableBackup = {
+  savedAt: '2026-01-01T00:00:00.000Z',
+  modules: [
+    {
+      id: 'custom-leapton',
+      manufacturer: 'Leapton',
+      model: 'LP182210-M-66-NB',
+      powerWp: 630,
+      widthM: 1.13,
+      lengthM: 2.38,
+      areaM2: 2.69,
+      isCustom: true,
+    },
+  ],
+  roof: { roofWidthText: '8', roofLengthText: '12', obstacles: [] },
+  offGrid: { clientName: 'Casa', currentAText: '20', currentBText: '', currentCText: '' },
+  calculation: { input: '450' },
+};
+const pulled = mergeBackups(emptyDevice, savedDevice);
+assert(pulled.modules[0]?.model === 'LP182210-M-66-NB', 'Atualização puxa a placa salva');
+assert(pulled.calculation?.input === '450', 'Atualização puxa o consumo');
+assert(pulled.roof?.roofWidthText === '8', 'Atualização puxa o telhado');
+assert(pulled.offGrid?.clientName === 'Casa', 'Atualização puxa o cliente da carga');
+const kept = mergeBackups(savedDevice, {
+  ...emptyDevice,
+  savedAt: '2026-12-01T00:00:00.000Z',
+});
+assert(kept.modules.length === 1, 'Cópia vazia mais nova não apaga a placa');
 
 console.log('✅ Self-test de cálculos OK');
 console.log(

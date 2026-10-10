@@ -2,7 +2,7 @@
   "expo": {
     "name": "Solar Calculator",
     "slug": "solar-calculator",
-    "version": "1.0.32",
+    "version": "1.0.34",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -20,7 +20,8 @@
     },
     "android": {
       "package": "com.solarcalculator.app",
-      "versionCode": 32,
+      "versionCode": 34,
+      "allowBackup": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#0B3D2E",
@@ -45,7 +46,8 @@
           "imageWidth": 200
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withDurableBackup.js"
     ],
     "extra": {
       "eas": {

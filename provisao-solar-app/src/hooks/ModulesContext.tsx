@@ -13,10 +13,12 @@ import {
   restoreModulesFromLocalBackupIfNeeded,
   writeLocalModulesBackup,
 } from '../services/moduleBackup';
+import { patchAppBackup, loadAppBackup } from '../services/appBackup';
 import {
   addCustomModule,
   loadCustomModules,
   removeCustomModule,
+  saveCustomModules,
 } from '../services/storage';
 import { SolarModule } from '../types';
 import { computeModuleArea } from '../utils/calculations';
@@ -32,6 +34,11 @@ type ModulesContextValue = {
     powerWp: number;
     widthM: number;
     lengthM: number;
+    thicknessMm?: number;
+    weightKg?: number;
+    frame?: string;
+    glass?: string;
+    datasheetNotes?: string;
   }) => Promise<SolarModule>;
   removeCustom: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
@@ -51,8 +58,17 @@ export function ModulesProvider({ children }: { children: React.ReactNode }) {
       let stored = await loadCustomModules();
       if (stored.length === 0) {
         stored = await restoreModulesFromLocalBackupIfNeeded();
-      } else {
+      }
+      if (stored.length === 0) {
+        const backup = await loadAppBackup();
+        if (backup.modules.length > 0) {
+          await saveCustomModules(backup.modules);
+          stored = backup.modules;
+        }
+      }
+      if (stored.length > 0) {
         await writeLocalModulesBackup(stored).catch(() => undefined);
+        await patchAppBackup({ modules: stored }).catch(() => undefined);
       }
       setCustomModules(stored);
     } finally {
@@ -76,7 +92,18 @@ export function ModulesProvider({ children }: { children: React.ReactNode }) {
       powerWp: number;
       widthM: number;
       lengthM: number;
+      thicknessMm?: number;
+      weightKg?: number;
+      frame?: string;
+      glass?: string;
+      datasheetNotes?: string;
     }) => {
+      const thicknessMm =
+        input.thicknessMm != null && input.thicknessMm > 0 ? input.thicknessMm : undefined;
+      const weightKg = input.weightKg != null && input.weightKg > 0 ? input.weightKg : undefined;
+      const frame = input.frame?.trim() || undefined;
+      const glass = input.glass?.trim() || undefined;
+      const datasheetNotes = input.datasheetNotes?.trim() || undefined;
       const module: SolarModule = {
         id: `custom-${Date.now()}`,
         manufacturer: input.manufacturer.trim() || 'Customizado',
@@ -86,10 +113,16 @@ export function ModulesProvider({ children }: { children: React.ReactNode }) {
         lengthM: input.lengthM,
         areaM2: computeModuleArea(input.lengthM, input.widthM),
         isCustom: true,
+        ...(thicknessMm != null ? { thicknessMm } : {}),
+        ...(weightKg != null ? { weightKg } : {}),
+        ...(frame ? { frame } : {}),
+        ...(glass ? { glass } : {}),
+        ...(datasheetNotes ? { datasheetNotes } : {}),
       };
       const next = await addCustomModule(module);
       setCustomModules(next);
       await writeLocalModulesBackup(next).catch(() => undefined);
+      await patchAppBackup({ modules: next }).catch(() => undefined);
       return module;
     },
     [],
@@ -99,6 +132,7 @@ export function ModulesProvider({ children }: { children: React.ReactNode }) {
     const next = await removeCustomModule(id);
     setCustomModules(next);
     await writeLocalModulesBackup(next).catch(() => undefined);
+    await patchAppBackup({ modules: next }).catch(() => undefined);
   }, []);
 
   const exportBackup = useCallback(async () => {
