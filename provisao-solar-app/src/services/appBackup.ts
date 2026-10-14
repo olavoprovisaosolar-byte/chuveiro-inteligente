@@ -1,6 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SolarModule } from '../types';
+import {
+  LoadEquipment,
+  LoadSurveyRecord,
+  mergeLoadHistory,
+  normalizeEquipment,
+  normalizeLoadHistory,
+} from '../utils/loadEquipment';
 import { backupHasUserData, mergeBackups } from './backupMerge';
 import { normalizeModules } from './storage';
 
@@ -53,6 +60,7 @@ export type OffGridDraft = {
   clientName: string;
   clientLocation: string;
   surveyDate: string;
+  equipment?: LoadEquipment[];
 };
 
 export type CalculationDraft = {
@@ -68,6 +76,7 @@ export type AppBackup = {
   roof: RoofWorkspaceDraft | null;
   offGrid: OffGridDraft | null;
   calculation: CalculationDraft | null;
+  loadHistory: LoadSurveyRecord[];
 };
 
 const listeners = new Set<() => void>();
@@ -84,6 +93,14 @@ function emptyBackup(): AppBackup {
     roof: null,
     offGrid: null,
     calculation: null,
+    loadHistory: [],
+  };
+}
+
+export function mergeBackupWithHistory(current: AppBackup, incoming: AppBackup): AppBackup {
+  return {
+    ...mergeBackups(current, incoming),
+    loadHistory: mergeLoadHistory(current.loadHistory ?? [], incoming.loadHistory ?? []),
   };
 }
 
@@ -99,13 +116,21 @@ export function parseAppBackup(raw: string): AppBackup {
   }
   const record = asRecord(parsed) ?? {};
   const modules = Array.isArray(record.modules) ? normalizeModules(record.modules) : [];
+  const offGridRecord = asRecord(record.offGrid);
+  const offGrid = offGridRecord
+    ? ({
+        ...(offGridRecord as unknown as OffGridDraft),
+        equipment: normalizeEquipment(offGridRecord.equipment),
+      } satisfies OffGridDraft)
+    : null;
   return {
     ...emptyBackup(),
     savedAt: typeof record.savedAt === 'string' ? record.savedAt : new Date().toISOString(),
     modules,
     roof: (asRecord(record.roof) as RoofWorkspaceDraft | null) ?? null,
-    offGrid: (asRecord(record.offGrid) as OffGridDraft | null) ?? null,
+    offGrid,
     calculation: (asRecord(record.calculation) as CalculationDraft | null) ?? null,
+    loadHistory: normalizeLoadHistory(record.loadHistory),
   };
 }
 
@@ -151,13 +176,13 @@ export async function loadAppBackup(): Promise<AppBackup> {
       }
       if (!backupHasUserData(loaded)) {
         const fromFile = await readFile();
-        if (fromFile) loaded = mergeBackups(loaded, fromFile);
+        if (fromFile) loaded = mergeBackupWithHistory(loaded, fromFile);
       }
       const externalRaw = await readExternalBackup();
       if (externalRaw) {
         try {
-          const merged = mergeBackups(loaded, parseAppBackup(externalRaw));
-          if (backupHasUserData(merged)) {
+          const merged = mergeBackupWithHistory(loaded, parseAppBackup(externalRaw));
+          if (backupHasUserData(merged) || merged.loadHistory.length > 0) {
             loaded = merged;
             await AsyncStorage.setItem(APP_BACKUP_KEY, JSON.stringify(loaded));
           }
@@ -177,22 +202,31 @@ export async function loadAppBackup(): Promise<AppBackup> {
   return loadingPromise;
 }
 
-export async function patchAppBackup(
-  partial: Partial<Pick<AppBackup, 'modules' | 'roof' | 'offGrid' | 'calculation'>>,
+let writeQueue: Promise<void> = Promise.resolve();
+
+export function patchAppBackup(
+  partial: Partial<Pick<AppBackup, 'modules' | 'roof' | 'offGrid' | 'calculation' | 'loadHistory'>>,
 ): Promise<AppBackup> {
-  const current = await loadAppBackup();
-  memory = {
-    ...current,
-    ...partial,
-    schema: APP_BACKUP_SCHEMA,
-    app: 'Solar Calculator',
-    savedAt: new Date().toISOString(),
-  };
-  const json = JSON.stringify(memory);
-  await AsyncStorage.setItem(APP_BACKUP_KEY, json);
-  await writeFile(memory).catch(() => undefined);
-  await publishDurableCopy(json);
-  return memory;
+  const job = writeQueue.then(async () => {
+    const current = await loadAppBackup();
+    memory = {
+      ...current,
+      ...partial,
+      schema: APP_BACKUP_SCHEMA,
+      app: 'Solar Calculator',
+      savedAt: new Date().toISOString(),
+    };
+    const json = JSON.stringify(memory);
+    await AsyncStorage.setItem(APP_BACKUP_KEY, json);
+    await writeFile(memory).catch(() => undefined);
+    await publishDurableCopy(json);
+    return memory;
+  });
+  writeQueue = job.then(
+    () => undefined,
+    () => undefined,
+  );
+  return job;
 }
 
 async function readExternalBackup(): Promise<string | null> {
