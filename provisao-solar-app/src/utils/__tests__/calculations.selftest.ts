@@ -14,6 +14,14 @@ import {
 import { explainProviderError } from '../aiErrors';
 import { datasheetIsComplete, parseModuleDatasheet } from '../moduleDatasheet';
 import { mergeBackups, type MergeableBackup } from '../../services/backupMerge';
+import {
+  activePhases,
+  mergeLoadHistory,
+  normalizeEquipment,
+  phaseTotals,
+  type LoadEquipment,
+  type LoadSurveyRecord,
+} from '../loadEquipment';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
 import {
@@ -352,6 +360,38 @@ const kept = mergeBackups(savedDevice, {
   savedAt: '2026-12-01T00:00:00.000Z',
 });
 assert(kept.modules.length === 1, 'Cópia vazia mais nova não apaga a placa');
+
+const phaseItems: LoadEquipment[] = [
+  { id: '1', name: 'Chuveiro', powerW: 1000, quantity: 2, hoursPerDay: 4, phase: 'A' },
+  { id: '2', name: 'Geladeira', powerW: 150, quantity: 1, hoursPerDay: 8, phase: 'B' },
+];
+const totalA = phaseTotals(phaseItems, 'A');
+assert(totalA.powerW === 2000, `Fase A soma 2000 W, veio ${totalA.powerW}`);
+assert(totalA.dailyWh === 8000, `Fase A soma 8000 Wh/dia, veio ${totalA.dailyWh}`);
+assert(phaseTotals(phaseItems, 'B').powerW === 150, 'Fase B soma 150 W');
+assert(activePhases('mono').join(',') === 'A', 'Monofásico destaca a Fase A');
+assert(activePhases('biphasic').join(',') === 'A,B', 'Bifásico destaca A e B');
+assert(activePhases('triphasic').join(',') === 'A,B,C', 'Trifásico destaca A, B e C');
+const normalizedGear = normalizeEquipment([
+  { id: '', name: 'Sem id', powerW: 10, quantity: 1, hoursPerDay: 1, phase: 'A' },
+  { id: 'ok', name: 'Lâmpada', powerW: 10, quantity: 1, hoursPerDay: 0, phase: 'C' },
+  { id: 'bad', name: 'Ruim', powerW: 0, quantity: 1, hoursPerDay: 1, phase: 'A' },
+]);
+assert(normalizedGear.length === 1 && normalizedGear[0]?.phase === 'C', 'Normalização descarta equipamento inválido');
+assert(normalizedGear[0]?.hoursPerDay === 0, 'Horas zero permanecem no equipamento');
+const savedSurvey = {
+  id: 's1',
+  savedAt: '2026-01-01T00:00:00.000Z',
+  clientName: 'Casa',
+  equipment: phaseItems,
+} as LoadSurveyRecord;
+const historyKept = mergeLoadHistory([savedSurvey], []);
+assert(historyKept.length === 1 && historyKept[0]?.clientName === 'Casa', 'Histórico vazio não apaga a carga salva');
+const historyNewer = mergeLoadHistory(
+  [savedSurvey],
+  [{ ...savedSurvey, savedAt: '2026-06-01T00:00:00.000Z', clientName: 'Casa nova' }],
+);
+assert(historyNewer.length === 1 && historyNewer[0]?.clientName === 'Casa nova', 'Histórico mais novo substitui o mesmo cadastro');
 
 console.log('✅ Self-test de cálculos OK');
 console.log(

@@ -2,16 +2,20 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { FieldLabel } from '../components/InfoTip';
 import { InputField } from '../components/InputField';
 import { LoadShareChart } from '../components/LoadShareChart';
+import { PhaseLoadBoard } from '../components/PhaseLoadCards';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenContainer } from '../components/ScreenContainer';
-import { loadAppBackup, patchAppBackup, subscribeAppBackup } from '../services/appBackup';
+import { loadAppBackup, OffGridDraft, patchAppBackup, subscribeAppBackup } from '../services/appBackup';
+import { restoreBackupFromDrive, shareBackupToDrive } from '../services/driveBackup';
+import { loadLoadHistory, rememberLoadSurvey, replaceLoadHistory } from '../services/loadHistory';
 import { useTheme } from '../theme/ThemeContext';
 import { formatNumber, parseLocaleNumber } from '../utils/calculations';
+import { LoadEquipment, LoadSurveyRecord, mergeLoadHistory, normalizeEquipment, normalizeLoadHistory } from '../utils/loadEquipment';
 import {
   AcOutputTopology,
   BatteryModelId,
@@ -91,41 +95,60 @@ export function LevantamentoScreen() {
   const [clientError, setClientError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [backupReady, setBackupReady] = useState(false);
+  const [equipment, setEquipment] = useState<LoadEquipment[]>([]);
+  const [history, setHistory] = useState<LoadSurveyRecord[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [driveMode, setDriveMode] = useState<'share' | 'restore' | null>(null);
+  const [notice, setNotice] = useState('');
+  const [noticeTone, setNoticeTone] = useState<'success' | 'warning'>('success');
+  const [formEpoch, setFormEpoch] = useState(0);
+
+  const applyDraft = useCallback((draft: OffGridDraft) => {
+    if (isOneOf(draft.supply, SUPPLY_VALUES)) setSupply(draft.supply);
+    if (draft.monoVoltage === 127 || draft.monoVoltage === 220) setMonoVoltage(draft.monoVoltage);
+    if (draft.triPair === '127_220' || draft.triPair === '220_380') setTriPair(draft.triPair);
+    setCurrentAText(draft.currentAText ?? '');
+    setCurrentBText(draft.currentBText ?? '');
+    setCurrentCText(draft.currentCText ?? '');
+    setCurrentNeutralText(draft.currentNeutralText ?? '');
+    if (typeof draft.utilization === 'number') setUtilization(draft.utilization);
+    if (isOneOf(draft.acOutput, AC_OUTPUT_VALUES)) setAcOutput(draft.acOutput);
+    if (isOneOf(draft.inverterBus, BUS_VALUES)) setInverterBus(draft.inverterBus);
+    if (isOneOf(draft.busVoltage, BUS_VALUES)) setBusVoltage(draft.busVoltage);
+    setBusTouched(Boolean(draft.busTouched));
+    setAutonomyText(draft.autonomyText ?? '12');
+    setAutonomyUnit(draft.autonomyUnit === 'days' ? 'days' : 'hours');
+    setUseDod(draft.useDod !== false);
+    setDodText(draft.dodText ?? '80');
+    if (isOneOf(draft.batteryModelId, BATTERY_IDS)) setBatteryModelId(draft.batteryModelId);
+    setEfficiencyText(draft.efficiencyText ?? '92');
+    setClientName(draft.clientName ?? '');
+    setClientLocation(draft.clientLocation ?? '');
+    setSurveyDate(draft.surveyDate || todayPtBr());
+    setEquipment(normalizeEquipment(draft.equipment));
+    setFormEpoch((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    const apply = (draft: NonNullable<Awaited<ReturnType<typeof loadAppBackup>>['offGrid']>) => {
-      if (isOneOf(draft.supply, SUPPLY_VALUES)) setSupply(draft.supply);
-      if (draft.monoVoltage === 127 || draft.monoVoltage === 220) setMonoVoltage(draft.monoVoltage);
-      if (draft.triPair === '127_220' || draft.triPair === '220_380') setTriPair(draft.triPair);
-      setCurrentAText(draft.currentAText ?? '');
-      setCurrentBText(draft.currentBText ?? '');
-      setCurrentCText(draft.currentCText ?? '');
-      setCurrentNeutralText(draft.currentNeutralText ?? '');
-      if (typeof draft.utilization === 'number') setUtilization(draft.utilization);
-      if (isOneOf(draft.acOutput, AC_OUTPUT_VALUES)) setAcOutput(draft.acOutput);
-      if (isOneOf(draft.inverterBus, BUS_VALUES)) setInverterBus(draft.inverterBus);
-      if (isOneOf(draft.busVoltage, BUS_VALUES)) setBusVoltage(draft.busVoltage);
-      setBusTouched(Boolean(draft.busTouched));
-      setAutonomyText(draft.autonomyText ?? '12');
-      setAutonomyUnit(draft.autonomyUnit === 'days' ? 'days' : 'hours');
-      setUseDod(draft.useDod !== false);
-      setDodText(draft.dodText ?? '80');
-      if (isOneOf(draft.batteryModelId, BATTERY_IDS)) setBatteryModelId(draft.batteryModelId);
-      setEfficiencyText(draft.efficiencyText ?? '92');
-      setClientName(draft.clientName ?? '');
-      setClientLocation(draft.clientLocation ?? '');
-      setSurveyDate(draft.surveyDate || todayPtBr());
-    };
-    loadAppBackup().then((backup) => {
+    loadAppBackup().then(async (backup) => {
       if (cancelled) return;
-      if (backup.offGrid) apply(backup.offGrid);
-      setBackupReady(true);
+      if (backup.offGrid) applyDraft(backup.offGrid);
+      const local = await loadLoadHistory();
+      if (cancelled) return;
+      const merged = mergeLoadHistory(backup.loadHistory ?? [], local);
+      setHistory(merged);
+      const mergedJson = JSON.stringify(merged);
+      if (mergedJson !== JSON.stringify(local) || mergedJson !== JSON.stringify(normalizeLoadHistory(backup.loadHistory))) {
+        const stored = await replaceLoadHistory(merged);
+        if (!cancelled) setHistory(stored);
+      }
+      if (!cancelled) setBackupReady(true);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyDraft]);
 
   useEffect(() => {
     if (!backupReady) return undefined;
@@ -153,6 +176,7 @@ export function LevantamentoScreen() {
           clientName,
           clientLocation,
           surveyDate,
+          equipment,
         },
       });
     }, 500);
@@ -180,37 +204,17 @@ export function LevantamentoScreen() {
     clientName,
     clientLocation,
     surveyDate,
+    equipment,
   ]);
 
   useEffect(() => {
     return subscribeAppBackup(() => {
       void loadAppBackup().then((backup) => {
-        if (!backup.offGrid) return;
-        const draft = backup.offGrid;
-        if (isOneOf(draft.supply, SUPPLY_VALUES)) setSupply(draft.supply);
-        if (draft.monoVoltage === 127 || draft.monoVoltage === 220) setMonoVoltage(draft.monoVoltage);
-        if (draft.triPair === '127_220' || draft.triPair === '220_380') setTriPair(draft.triPair);
-        if (isOneOf(draft.acOutput, AC_OUTPUT_VALUES)) setAcOutput(draft.acOutput);
-        if (isOneOf(draft.inverterBus, BUS_VALUES)) setInverterBus(draft.inverterBus);
-        if (isOneOf(draft.busVoltage, BUS_VALUES)) setBusVoltage(draft.busVoltage);
-        setBusTouched(Boolean(draft.busTouched));
-        setUseDod(draft.useDod !== false);
-        setAutonomyUnit(draft.autonomyUnit === 'days' ? 'days' : 'hours');
-        if (typeof draft.utilization === 'number') setUtilization(draft.utilization);
-        setCurrentAText(draft.currentAText ?? '');
-        setCurrentBText(draft.currentBText ?? '');
-        setCurrentCText(draft.currentCText ?? '');
-        setCurrentNeutralText(draft.currentNeutralText ?? '');
-        setClientName(draft.clientName ?? '');
-        setClientLocation(draft.clientLocation ?? '');
-        setSurveyDate(draft.surveyDate || todayPtBr());
-        setAutonomyText(draft.autonomyText ?? '12');
-        setEfficiencyText(draft.efficiencyText ?? '92');
-        setDodText(draft.dodText ?? '80');
-        if (isOneOf(draft.batteryModelId, BATTERY_IDS)) setBatteryModelId(draft.batteryModelId);
+        if (backup.offGrid) applyDraft(backup.offGrid);
+        setHistory(normalizeLoadHistory(backup.loadHistory));
       });
     });
-  }, []);
+  }, [applyDraft]);
 
   const draft = useMemo(() => {
     const autonomyRaw = parseLocaleNumber(autonomyText);
@@ -323,11 +327,162 @@ export function LevantamentoScreen() {
     }
   };
 
+  function resetForm() {
+    setSupply('biphasic');
+    setMonoVoltage(127);
+    setTriPair('127_220');
+    setCurrentAText('');
+    setCurrentBText('');
+    setCurrentCText('');
+    setCurrentNeutralText('');
+    setUtilization(0.8);
+    setAcOutput('mono220');
+    setInverterBus(48);
+    setBusVoltage(48);
+    setBusTouched(false);
+    setAutonomyText('12');
+    setAutonomyUnit('hours');
+    setUseDod(true);
+    setDodText('80');
+    setBatteryModelId('li-48-100');
+    setShowAlternative(false);
+    setEfficiencyText('92');
+    setClientName('');
+    setClientLocation('');
+    setSurveyDate(todayPtBr());
+    setClientError('');
+    setEquipment([]);
+    setFormEpoch((value) => value + 1);
+  }
+
+  async function onSaveLoad() {
+    const name = clientName.trim();
+    if (!name) {
+      setClientError('Informe o nome do cliente ou do projeto.');
+      setNotice('Informe o nome do cliente ou do projeto.');
+      setNoticeTone('warning');
+      return;
+    }
+    setSaving(true);
+    try {
+      const record: LoadSurveyRecord = {
+        id: `carga-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        savedAt: new Date().toISOString(),
+        clientName: name,
+        clientLocation: clientLocation.trim(),
+        surveyDate,
+        supply,
+        monoVoltage,
+        triPair,
+        currentAText,
+        currentBText,
+        currentCText,
+        currentNeutralText,
+        utilization,
+        acOutput,
+        inverterBus,
+        busVoltage,
+        busTouched,
+        autonomyText,
+        autonomyUnit,
+        useDod,
+        dodText,
+        batteryModelId,
+        efficiencyText,
+        equipment,
+      };
+      const next = await rememberLoadSurvey(record);
+      setHistory(next);
+      resetForm();
+      setNoticeTone('success');
+      setNotice('Carga salva com sucesso!');
+      Alert.alert(
+        'Carga salva com sucesso!',
+        'O formulário foi limpo e o cadastro ficou no histórico deste aparelho.',
+      );
+    } catch {
+      Alert.alert('Não foi possível salvar', 'Tente novamente. Os dados digitados continuam na tela.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function restoreHistory(record: LoadSurveyRecord) {
+    applyDraft({
+      supply: record.supply,
+      monoVoltage: record.monoVoltage === 220 ? 220 : 127,
+      triPair: record.triPair === '220_380' ? '220_380' : '127_220',
+      currentAText: record.currentAText,
+      currentBText: record.currentBText,
+      currentCText: record.currentCText,
+      currentNeutralText: record.currentNeutralText,
+      utilization: record.utilization,
+      acOutput: record.acOutput,
+      inverterBus: record.inverterBus === 24 ? 24 : 48,
+      busVoltage: record.busVoltage === 24 ? 24 : 48,
+      busTouched: record.busTouched,
+      autonomyText: record.autonomyText,
+      autonomyUnit: record.autonomyUnit,
+      useDod: record.useDod,
+      dodText: record.dodText,
+      batteryModelId: record.batteryModelId,
+      efficiencyText: record.efficiencyText,
+      clientName: record.clientName,
+      clientLocation: record.clientLocation,
+      surveyDate: record.surveyDate,
+      equipment: record.equipment,
+    });
+    setClientError('');
+    setNoticeTone('success');
+    setNotice(`Carga de ${record.clientName} restaurada.`);
+  }
+
+  async function onDriveBackup() {
+    setDriveMode('share');
+    try {
+      const mode = await shareBackupToDrive();
+      const message =
+        mode === 'downloaded'
+          ? 'Backup baixado. Envie o arquivo JSON para uma pasta do Google Drive.'
+          : 'Escolha o Google Drive para guardar o arquivo de backup.';
+      setNoticeTone('success');
+      setNotice(message);
+      Alert.alert('Backup pronto', message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível gerar o backup.';
+      setNoticeTone('warning');
+      setNotice(message);
+      Alert.alert('Backup', message);
+    } finally {
+      setDriveMode(null);
+    }
+  }
+
+  async function onDriveRestore() {
+    setDriveMode('restore');
+    try {
+      const restored = await restoreBackupFromDrive();
+      const message = `Backup restaurado. ${restored.surveys} carga(s) no histórico.`;
+      setNoticeTone('success');
+      setNotice(message);
+      Alert.alert('Backup restaurado', message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível restaurar o backup.';
+      if (message === 'Restauração cancelada.') return;
+      setNoticeTone('warning');
+      setNotice(message);
+      Alert.alert('Backup', message);
+    } finally {
+      setDriveMode(null);
+    }
+  }
+
   return (
     <ScreenContainer
       title="Levantamento"
-      subtitle="Medição com alicate e dimensionamento off-grid / retrofit."
+      subtitle="Medição com alicate, equipamentos por fase e dimensionamento off-grid."
     >
+      {notice ? <Banner tone={noticeTone} text={notice} /> : null}
       <Section
         title="Identificação do cliente"
         hint="Estes dados abrem a proposta técnica e definem o nome do PDF."
@@ -508,6 +663,66 @@ export function LevantamentoScreen() {
             />
           </>
         ) : null}
+      </Section>
+
+      <Section
+        title="Equipamentos por fase"
+        hint="Cada aparelho fica no card da fase em que está ligado. A potência e o consumo do dia mudam na hora para o balanceamento."
+      >
+        <PhaseLoadBoard
+          key={formEpoch}
+          supply={supply}
+          monoVoltage={monoVoltage}
+          triPair={triPair}
+          currentA={parseNonNegative(currentAText)}
+          currentB={parseNonNegative(currentBText)}
+          currentC={parseNonNegative(currentCText)}
+          equipment={equipment}
+          onChange={setEquipment}
+        />
+        <PrimaryButton label="Salvar carga" onPress={onSaveLoad} loading={saving} style={styles.exportBtn} />
+      </Section>
+
+      <Section
+        title="Histórico neste aparelho"
+        hint="Cada salvamento fica guardado aqui para recuperar um cadastro apagado ou uma atualização do aplicativo."
+      >
+        {history.length === 0 ? (
+          <Text style={[styles.pending, { color: colors.textSecondary }]}>Nenhuma carga salva ainda.</Text>
+        ) : (
+          history.slice(0, 20).map((record) => (
+            <View key={record.id} style={[styles.historyRow, { borderColor: colors.border }]}>
+              <Text style={[styles.historyTitle, { color: colors.text }]}>{record.clientName}</Text>
+              <Text style={[styles.historyMeta, { color: colors.textSecondary }]}>
+                {record.surveyDate || 'Sem data'} · {record.equipment.length}{' '}
+                {record.equipment.length === 1 ? 'equipamento' : 'equipamentos'} ·{' '}
+                {new Date(record.savedAt).toLocaleString('pt-BR')}
+              </Text>
+              <PrimaryButton label="Restaurar" onPress={() => restoreHistory(record)} variant="ghost" />
+            </View>
+          ))
+        )}
+      </Section>
+
+      <Section
+        title="Backup no Google Drive"
+        hint="Gera um arquivo JSON com data e hora. No celular, escolha o Google Drive na folha de compartilhamento. Para voltar, selecione esse arquivo."
+      >
+        <PrimaryButton
+          label="Fazer Backup no Google Drive"
+          onPress={onDriveBackup}
+          loading={driveMode === 'share'}
+          disabled={driveMode !== null}
+          variant="secondary"
+          style={styles.exportBtn}
+        />
+        <PrimaryButton
+          label="Restaurar Backup do Google Drive"
+          onPress={onDriveRestore}
+          loading={driveMode === 'restore'}
+          disabled={driveMode !== null}
+          variant="ghost"
+        />
       </Section>
 
       <Section
@@ -1254,6 +1469,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginTop: 6,
+  },
+  historyRow: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  historyTitle: {
+    fontFamily: 'Outfit_600SemiBold',
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  historyMeta: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+    marginBottom: 8,
   },
   exportBtn: { marginBottom: 8 },
   fileName: {
