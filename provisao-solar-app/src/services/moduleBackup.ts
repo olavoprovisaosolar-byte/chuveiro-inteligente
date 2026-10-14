@@ -14,7 +14,6 @@ import {
   normalizeModules,
   saveCustomModules,
 } from './storage';
-import { replaceLoadHistory } from './loadHistory';
 
 export const BACKUP_FILE_NAME = 'solar-calculator-modules-backup.json';
 export const BACKUP_SCHEMA = 'solar-calculator.modules.v1';
@@ -130,13 +129,7 @@ export async function importModulesBackupFromPicker(): Promise<{
   });
   const backup = parseAppBackup(raw);
   const incoming = backup.modules;
-  if (
-    incoming.length === 0 &&
-    !backup.roof &&
-    !backup.offGrid &&
-    !backup.calculation &&
-    backup.loadHistory.length === 0
-  ) {
+  if (incoming.length === 0 && !backup.roof && !backup.offGrid && !backup.calculation) {
     throw new Error('Nenhuma placa válida encontrada no arquivo.');
   }
 
@@ -152,16 +145,12 @@ export async function importModulesBackupFromPicker(): Promise<{
     roof?: typeof backup.roof;
     offGrid?: typeof backup.offGrid;
     calculation?: typeof backup.calculation;
-    loadHistory?: typeof backup.loadHistory;
   } = {};
   if (merged.length > 0) partial.modules = merged;
   if (record && typeof record === 'object' && !Array.isArray(record)) {
     if (record.roof) partial.roof = backup.roof;
     if (record.offGrid) partial.offGrid = backup.offGrid;
     if (record.calculation) partial.calculation = backup.calculation;
-    if (backup.loadHistory.length > 0) {
-      partial.loadHistory = await replaceLoadHistory(backup.loadHistory);
-    }
   }
   await patchAppBackup(partial);
   notifyAppBackupImported();

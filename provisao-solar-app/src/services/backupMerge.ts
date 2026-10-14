@@ -13,10 +13,8 @@ export type MergeableBackup = {
     currentAText?: string;
     currentBText?: string;
     currentCText?: string;
-    equipment?: unknown[];
   } | null;
   calculation: { input?: string } | null;
-  loadHistory?: readonly unknown[] | null;
 };
 
 function text(value: string | undefined): string {
@@ -38,12 +36,10 @@ export function backupHasUserData(backup: MergeableBackup): boolean {
     (text(backup.offGrid.clientName) ||
       text(backup.offGrid.currentAText) ||
       text(backup.offGrid.currentBText) ||
-      text(backup.offGrid.currentCText) ||
-      (backup.offGrid.equipment?.length ?? 0) > 0)
+      text(backup.offGrid.currentCText))
   ) {
     return true;
   }
-  if ((backup.loadHistory?.length ?? 0) > 0) return true;
   return Boolean(backup.calculation && text(backup.calculation.input));
 }
 
