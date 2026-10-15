@@ -110,6 +110,7 @@ export function LevantamentoScreen() {
   const [pendingDelete, setPendingDelete] = useState<SurveyRecord | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const historyReady = useRef(false);
+  const draftIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -314,14 +315,72 @@ export function LevantamentoScreen() {
 
   const reportFileName = offGridReportFileName(clientName, surveyDate);
 
+  function nextClientId(): string {
+    if (editingId) return editingId;
+    if (!draftIdRef.current) {
+      draftIdRef.current = `carga-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+    return draftIdRef.current;
+  }
+
+  async function persistCurrentClient(): Promise<boolean> {
+    const name = clientName.trim();
+    if (!name) {
+      setClientError('Informe o nome do cliente ou do projeto.');
+      return false;
+    }
+    historyReady.current = true;
+    const savedAt = new Date().toISOString();
+    const [record] = normalizeSurveyHistory([
+      {
+        id: nextClientId(),
+        savedAt,
+        dataCadastro: savedAt,
+        nomeCliente: name,
+        clientName: name,
+        clientLocation: clientLocation.trim(),
+        surveyDate,
+        supply,
+        monoVoltage,
+        triPair,
+        currentAText,
+        currentBText,
+        currentCText,
+        currentNeutralText,
+        utilization,
+        acOutput,
+        inverterBus,
+        busVoltage,
+        busTouched,
+        autonomyText,
+        autonomyUnit,
+        useDod,
+        dodText,
+        batteryModelId,
+        efficiencyText,
+      },
+    ]);
+    if (!record) return false;
+    const next = await rememberSurvey(record);
+    setHistory(next);
+    setClientError('');
+    return true;
+  }
+
   const onExportPdf = async () => {
     if (!result) return;
     if (!clientName.trim()) {
       setClientError('Informe o nome do cliente ou do projeto.');
       return;
     }
-    setClientError('');
+    const savedName = clientName.trim();
     setExporting(true);
+    let saved = false;
+    try {
+      saved = await persistCurrentClient();
+    } catch {
+      Alert.alert('Não foi possível salvar o cadastro', 'O relatório ainda será gerado.');
+    }
     try {
       const html = buildOffGridReportHtml(draft, result, {
         clientName,
@@ -346,9 +405,18 @@ export function LevantamentoScreen() {
       } else {
         Alert.alert('PDF gerado', 'O relatório foi criado, mas o compartilhamento não está disponível neste aparelho.');
       }
+      if (saved) {
+        setNotice(`Cadastro de ${savedName} salvo. Ele aparece em Consultar / Buscar Clientes.`);
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      }
       setPdfChoiceOpen(true);
     } catch {
-      Alert.alert('Não foi possível gerar o PDF', 'Tente novamente. Se o problema continuar, confira o espaço livre do aparelho.');
+      Alert.alert(
+        'Não foi possível gerar o PDF',
+        saved
+          ? `O cadastro de ${savedName} foi salvo na consulta. Tente gerar o PDF novamente.`
+          : 'Tente novamente. Se o problema continuar, confira o espaço livre do aparelho.',
+      );
     } finally {
       setExporting(false);
     }
@@ -379,6 +447,7 @@ export function LevantamentoScreen() {
     setSurveyDate(todayPtBr());
     setClientError('');
     setEditingId(null);
+    draftIdRef.current = null;
   }, []);
 
   const openSurvey = useCallback((record: SurveyRecord) => {
@@ -415,45 +484,10 @@ export function LevantamentoScreen() {
       return;
     }
     setSaving(true);
-    historyReady.current = true;
     try {
-      const savedAt = new Date().toISOString();
-      const [record] = normalizeSurveyHistory([
-        {
-          id: editingId ?? `carga-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          savedAt,
-          dataCadastro: savedAt,
-          nomeCliente: name,
-          clientName: name,
-          clientLocation: clientLocation.trim(),
-          surveyDate,
-          supply,
-          monoVoltage,
-          triPair,
-          currentAText,
-          currentBText,
-          currentCText,
-          currentNeutralText,
-          utilization,
-          acOutput,
-          inverterBus,
-          busVoltage,
-          busTouched,
-          autonomyText,
-          autonomyUnit,
-          useDod,
-          dodText,
-          batteryModelId,
-          efficiencyText,
-        },
-      ]);
-      if (!record) {
-        Alert.alert('Não foi possível salvar', 'Informe o nome do cliente ou do projeto.');
-        return;
-      }
-      const next = await rememberSurvey(record);
-      setHistory(next);
       const updated = Boolean(editingId);
+      const ok = await persistCurrentClient();
+      if (!ok) return;
       resetForm();
       const confirmation = updated
         ? 'Cadastro atualizado. O formulário foi limpo para um novo cliente.'
@@ -985,13 +1019,19 @@ export function LevantamentoScreen() {
       <ActionDialog
         visible={pdfChoiceOpen}
         title="Relatório baixado"
-        message="Deseja iniciar um novo formulário em branco ou manter os dados atuais para edição?"
+        message="O cadastro foi salvo na consulta. Deseja iniciar um novo formulário em branco ou manter os dados atuais para edição?"
         primary={{
           label: 'Novo',
           onPress: () => {
+            const name = clientName.trim();
             setPdfChoiceOpen(false);
             resetForm();
-            setNotice('Formulário limpo para um novo cadastro.');
+            setNotice(
+              name
+                ? `Formulário limpo. O cadastro de ${name} continua em Consultar / Buscar Clientes.`
+                : 'Formulário limpo para um novo cadastro.',
+            );
+            scrollRef.current?.scrollTo({ y: 0, animated: true });
           },
         }}
         secondary={{

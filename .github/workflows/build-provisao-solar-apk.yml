@@ -21,6 +21,7 @@ on:
       - cursor/campos-amperes-historico-f794
       - cursor/pasta-backup-raiz-f794
       - cursor/lista-clientes-f794
+      - cursor/salvar-cadastro-pdf-f794
       - master
       - main
     paths:
