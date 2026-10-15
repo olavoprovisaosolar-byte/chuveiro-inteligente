@@ -15,6 +15,7 @@ export type MergeableBackup = {
     currentCText?: string;
   } | null;
   calculation: { input?: string } | null;
+  loadHistory?: readonly unknown[] | null;
 };
 
 function text(value: string | undefined): string {
@@ -40,6 +41,7 @@ export function backupHasUserData(backup: MergeableBackup): boolean {
   ) {
     return true;
   }
+  if ((backup.loadHistory?.length ?? 0) > 0) return true;
   return Boolean(backup.calculation && text(backup.calculation.input));
 }
 

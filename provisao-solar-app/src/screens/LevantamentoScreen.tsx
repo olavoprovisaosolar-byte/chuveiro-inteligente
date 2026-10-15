@@ -2,16 +2,20 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActionDialog } from '../components/ActionDialog';
+import { CurrentAmpCard } from '../components/CurrentAmpCard';
 import { FieldLabel } from '../components/InfoTip';
 import { InputField } from '../components/InputField';
 import { LoadShareChart } from '../components/LoadShareChart';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { loadAppBackup, patchAppBackup, subscribeAppBackup } from '../services/appBackup';
+import { loadSurveyHistory, rememberSurvey, replaceSurveyHistory } from '../services/surveyStore';
 import { useTheme } from '../theme/ThemeContext';
 import { formatNumber, parseLocaleNumber } from '../utils/calculations';
+import { mergeSurveyHistory, normalizeSurveyHistory, searchSurveys, SurveyRecord } from '../utils/surveyHistory';
 import {
   AcOutputTopology,
   BatteryModelId,
@@ -91,6 +95,12 @@ export function LevantamentoScreen() {
   const [clientError, setClientError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [backupReady, setBackupReady] = useState(false);
+  const [history, setHistory] = useState<SurveyRecord[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [pdfChoiceOpen, setPdfChoiceOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,10 +127,18 @@ export function LevantamentoScreen() {
       setClientLocation(draft.clientLocation ?? '');
       setSurveyDate(draft.surveyDate || todayPtBr());
     };
-    loadAppBackup().then((backup) => {
+    loadAppBackup().then(async (backup) => {
       if (cancelled) return;
       if (backup.offGrid) apply(backup.offGrid);
-      setBackupReady(true);
+      const local = await loadSurveyHistory();
+      if (cancelled) return;
+      const merged = mergeSurveyHistory(backup.loadHistory ?? [], local);
+      setHistory(merged);
+      if (JSON.stringify(merged) !== JSON.stringify(local)) {
+        const stored = await replaceSurveyHistory(merged);
+        if (!cancelled) setHistory(stored);
+      }
+      if (!cancelled) setBackupReady(true);
     });
     return () => {
       cancelled = true;
@@ -185,6 +203,7 @@ export function LevantamentoScreen() {
   useEffect(() => {
     return subscribeAppBackup(() => {
       void loadAppBackup().then((backup) => {
+        setHistory(normalizeSurveyHistory(backup.loadHistory));
         if (!backup.offGrid) return;
         const draft = backup.offGrid;
         if (isOneOf(draft.supply, SUPPLY_VALUES)) setSupply(draft.supply);
@@ -316,6 +335,7 @@ export function LevantamentoScreen() {
       } else {
         Alert.alert('PDF gerado', 'O relatório foi criado, mas o compartilhamento não está disponível neste aparelho.');
       }
+      setPdfChoiceOpen(true);
     } catch {
       Alert.alert('Não foi possível gerar o PDF', 'Tente novamente. Se o problema continuar, confira o espaço livre do aparelho.');
     } finally {
@@ -323,11 +343,150 @@ export function LevantamentoScreen() {
     }
   };
 
+  const resetForm = useCallback(() => {
+    setSupply('biphasic');
+    setMonoVoltage(127);
+    setTriPair('127_220');
+    setCurrentAText('');
+    setCurrentBText('');
+    setCurrentCText('');
+    setCurrentNeutralText('');
+    setUtilization(0.8);
+    setAcOutput('mono220');
+    setInverterBus(48);
+    setBusVoltage(48);
+    setBusTouched(false);
+    setAutonomyText('12');
+    setAutonomyUnit('hours');
+    setUseDod(true);
+    setDodText('80');
+    setBatteryModelId('li-48-100');
+    setShowAlternative(false);
+    setEfficiencyText('92');
+    setClientName('');
+    setClientLocation('');
+    setSurveyDate(todayPtBr());
+    setClientError('');
+    setEditingId(null);
+  }, []);
+
+  const openSurvey = useCallback((record: SurveyRecord) => {
+    if (isOneOf(record.supply, SUPPLY_VALUES)) setSupply(record.supply);
+    setMonoVoltage(record.monoVoltage === 220 ? 220 : 127);
+    setTriPair(record.triPair === '220_380' ? '220_380' : '127_220');
+    setCurrentAText(record.currentAText);
+    setCurrentBText(record.currentBText);
+    setCurrentCText(record.currentCText);
+    setCurrentNeutralText(record.currentNeutralText);
+    setUtilization(record.utilization);
+    if (isOneOf(record.acOutput, AC_OUTPUT_VALUES)) setAcOutput(record.acOutput);
+    if (isOneOf(record.inverterBus, BUS_VALUES)) setInverterBus(record.inverterBus);
+    if (isOneOf(record.busVoltage, BUS_VALUES)) setBusVoltage(record.busVoltage);
+    setBusTouched(record.busTouched);
+    setAutonomyText(record.autonomyText);
+    setAutonomyUnit(record.autonomyUnit);
+    setUseDod(record.useDod);
+    setDodText(record.dodText);
+    if (isOneOf(record.batteryModelId, BATTERY_IDS)) setBatteryModelId(record.batteryModelId);
+    setEfficiencyText(record.efficiencyText);
+    setClientName(record.clientName);
+    setClientLocation(record.clientLocation);
+    setSurveyDate(record.surveyDate || todayPtBr());
+    setClientError('');
+    setEditingId(record.id);
+    setNotice(`Cadastro de ${record.clientName} aberto para edição.`);
+  }, []);
+
+  async function onSave() {
+    const name = clientName.trim();
+    if (!name) {
+      setClientError('Informe o nome do cliente ou do projeto.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const record: SurveyRecord = {
+        id: editingId ?? `carga-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        savedAt: new Date().toISOString(),
+        clientName: name,
+        clientLocation: clientLocation.trim(),
+        surveyDate,
+        supply,
+        monoVoltage,
+        triPair,
+        currentAText,
+        currentBText,
+        currentCText,
+        currentNeutralText,
+        utilization,
+        acOutput,
+        inverterBus,
+        busVoltage,
+        busTouched,
+        autonomyText,
+        autonomyUnit,
+        useDod,
+        dodText,
+        batteryModelId,
+        efficiencyText,
+      };
+      const next = await rememberSurvey(record);
+      setHistory(next);
+      const updated = Boolean(editingId);
+      resetForm();
+      const confirmation = updated
+        ? 'Cadastro atualizado. O formulário foi limpo para um novo cliente.'
+        : 'Cadastro salvo. O formulário foi limpo para um novo cliente.';
+      setNotice(confirmation);
+      Alert.alert('Cadastro salvo', confirmation);
+    } catch {
+      Alert.alert('Não foi possível salvar', 'Tente novamente. Os dados digitados continuam na tela.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const visibleSurveys = searchSurveys(history, searchText);
+
   return (
     <ScreenContainer
       title="Levantamento"
       subtitle="Medição com alicate e dimensionamento off-grid / retrofit."
     >
+      {notice ? <Banner tone="success" text={notice} /> : null}
+      <Section
+        title="Consultar / Buscar Clientes"
+        hint="Encontre um cadastro pelo nome, abra para corrigir e salve de novo."
+      >
+        <InputField
+          label="Buscar cliente"
+          value={searchText}
+          onChangeText={setSearchText}
+          placeholder="Ex.: Francisco"
+          autoCapitalize="words"
+        />
+        {editingId ? (
+          <Text style={[styles.fileName, { color: colors.text }]}>
+            Edição aberta. Salvar atualiza este cliente.
+          </Text>
+        ) : null}
+        {history.length === 0 ? (
+          <Text style={[styles.pending, { color: colors.textSecondary }]}>Nenhum cadastro salvo ainda.</Text>
+        ) : visibleSurveys.length === 0 ? (
+          <Text style={[styles.pending, { color: colors.textSecondary }]}>Nenhum cliente encontrado.</Text>
+        ) : (
+          visibleSurveys.slice(0, 40).map((record) => (
+            <View key={record.id} style={[styles.historyRow, { borderColor: colors.border }]}>
+              <Text style={[styles.historyTitle, { color: colors.text }]}>{record.clientName}</Text>
+              <Text style={[styles.historyMeta, { color: colors.textSecondary }]}>
+                {record.surveyDate || 'Sem data'} · {record.clientLocation || 'Sem endereço'} ·{' '}
+                {new Date(record.savedAt).toLocaleString('pt-BR')}
+              </Text>
+              <PrimaryButton label="Abrir" onPress={() => openSurvey(record)} variant="ghost" />
+            </View>
+          ))
+        )}
+      </Section>
       <Section
         title="Identificação do cliente"
         hint="Estes dados abrem a proposta técnica e definem o nome do PDF."
@@ -402,14 +561,7 @@ export function LevantamentoScreen() {
               value={String(monoVoltage)}
               onChange={(key) => setMonoVoltage(key === '220' ? 220 : 127)}
             />
-            <InputField
-              label="Corrente Fase A (A)"
-              icon="flash-outline"
-              value={currentAText}
-              onChangeText={setCurrentAText}
-              keyboardType="decimal-pad"
-              placeholder="0"
-            />
+            <CurrentAmpCard tone="A" value={currentAText} onChangeText={setCurrentAText} />
           </>
         ) : null}
         {supply === 'biphasic' ? (
@@ -417,38 +569,13 @@ export function LevantamentoScreen() {
             <Text style={[styles.fixedVoltage, { color: colors.textSecondary }]}>
               Tensões deste padrão: 127 V fase-neutro e 220 V fase-fase.
             </Text>
-            <View style={styles.pair}>
-              <View style={styles.pairItem}>
-                <InputField
-                  label="Corrente Fase A (A)"
-                  icon="flash-outline"
-                  value={currentAText}
-                  onChangeText={setCurrentAText}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                />
-              </View>
-              <View style={styles.pairItem}>
-                <InputField
-                  label="Corrente Fase B (A)"
-                  icon="flash-outline"
-                  value={currentBText}
-                  onChangeText={setCurrentBText}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                />
-              </View>
-            </View>
-            <InputField
-              label="Corrente no Neutro (A)"
-              icon="ellipse"
-              highlight
-              tip={FIELD_HELP.neutral}
-              hint={FIELD_HELP.neutral}
+            <CurrentAmpCard tone="A" value={currentAText} onChangeText={setCurrentAText} />
+            <CurrentAmpCard tone="B" value={currentBText} onChangeText={setCurrentBText} />
+            <CurrentAmpCard
+              tone="N"
               value={currentNeutralText}
               onChangeText={setCurrentNeutralText}
-              keyboardType="decimal-pad"
-              placeholder="0"
+              tip={FIELD_HELP.neutral}
             />
           </>
         ) : null}
@@ -465,46 +592,14 @@ export function LevantamentoScreen() {
               value={triPair}
               onChange={(key) => setTriPair(key === '220_380' ? '220_380' : '127_220')}
             />
-            <View style={styles.pair}>
-              <View style={styles.pairItem}>
-                <InputField
-                  label="Corrente Fase A (A)"
-                  icon="flash-outline"
-                  value={currentAText}
-                  onChangeText={setCurrentAText}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                />
-              </View>
-              <View style={styles.pairItem}>
-                <InputField
-                  label="Corrente Fase B (A)"
-                  icon="flash-outline"
-                  value={currentBText}
-                  onChangeText={setCurrentBText}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                />
-              </View>
-            </View>
-            <InputField
-              label="Corrente Fase C (A)"
-              icon="flash-outline"
-              value={currentCText}
-              onChangeText={setCurrentCText}
-              keyboardType="decimal-pad"
-              placeholder="0"
-            />
-            <InputField
-              label="Corrente no Neutro (A)"
-              icon="ellipse"
-              highlight
-              tip={FIELD_HELP.neutral}
-              hint={FIELD_HELP.neutral}
+            <CurrentAmpCard tone="A" value={currentAText} onChangeText={setCurrentAText} />
+            <CurrentAmpCard tone="B" value={currentBText} onChangeText={setCurrentBText} />
+            <CurrentAmpCard tone="C" value={currentCText} onChangeText={setCurrentCText} />
+            <CurrentAmpCard
+              tone="N"
               value={currentNeutralText}
               onChangeText={setCurrentNeutralText}
-              keyboardType="decimal-pad"
-              placeholder="0"
+              tip={FIELD_HELP.neutral}
             />
           </>
         ) : null}
@@ -658,6 +753,22 @@ export function LevantamentoScreen() {
           placeholder="92"
         />
       </Section>
+
+      <View style={styles.actionRow}>
+        <View style={styles.actionItem}>
+          <PrimaryButton label="Salvar" onPress={() => void onSave()} loading={saving} />
+        </View>
+        <View style={styles.actionItem}>
+          <PrimaryButton
+            label="Novo Cadastro"
+            onPress={() => {
+              resetForm();
+              setNotice('Formulário limpo.');
+            }}
+            variant="ghost"
+          />
+        </View>
+      </View>
 
       {validationError ? (
         <Text style={[styles.pending, { color: colors.textSecondary }]}>{validationError}</Text>
@@ -825,6 +936,26 @@ export function LevantamentoScreen() {
           </Text>
         </>
       ) : null}
+      <ActionDialog
+        visible={pdfChoiceOpen}
+        title="Relatório baixado"
+        message="Deseja iniciar um novo formulário em branco ou manter os dados atuais para edição?"
+        primary={{
+          label: 'Novo',
+          onPress: () => {
+            setPdfChoiceOpen(false);
+            resetForm();
+            setNotice('Formulário limpo para um novo cadastro.');
+          },
+        }}
+        secondary={{
+          label: 'Manter',
+          onPress: () => {
+            setPdfChoiceOpen(false);
+            setNotice('Os dados continuam na tela para edição.');
+          },
+        }}
+      />
     </ScreenContainer>
   );
 }
@@ -1254,6 +1385,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginTop: 6,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  actionItem: { flex: 1 },
+  historyRow: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  historyTitle: {
+    fontFamily: 'Outfit_700Bold',
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  historyMeta: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+    marginBottom: 8,
   },
   exportBtn: { marginBottom: 8 },
   fileName: {

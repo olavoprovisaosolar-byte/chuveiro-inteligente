@@ -11,10 +11,11 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { enableScreens } from 'react-native-screens';
+import { RestoreBackupOffer } from './src/components/RestoreBackupOffer';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ModulesProvider } from './src/hooks/ModulesContext';
 import { RoofWorkspaceProvider } from './src/hooks/RoofWorkspaceContext';
@@ -26,10 +27,11 @@ SplashScreen.preventAutoHideAsync().catch(() => undefined);
 function AppShell() {
   const { isDark } = useTheme();
   return (
-    <>
+    <View style={styles.shell}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppNavigator />
-    </>
+      <RestoreBackupOffer />
+    </View>
   );
 }
 
@@ -72,4 +74,5 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  shell: { flex: 1 },
 });

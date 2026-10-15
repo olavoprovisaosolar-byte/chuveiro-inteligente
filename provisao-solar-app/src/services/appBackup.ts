@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SolarModule } from '../types';
+import { mergeSurveyHistory, normalizeSurveyHistory, SurveyRecord } from '../utils/surveyHistory';
 import { backupHasUserData, mergeBackups } from './backupMerge';
 import { normalizeModules } from './storage';
 
@@ -68,6 +69,7 @@ export type AppBackup = {
   roof: RoofWorkspaceDraft | null;
   offGrid: OffGridDraft | null;
   calculation: CalculationDraft | null;
+  loadHistory: SurveyRecord[];
 };
 
 const listeners = new Set<() => void>();
@@ -84,6 +86,14 @@ function emptyBackup(): AppBackup {
     roof: null,
     offGrid: null,
     calculation: null,
+    loadHistory: [],
+  };
+}
+
+export function mergeBackupWithHistory(current: AppBackup, incoming: AppBackup): AppBackup {
+  return {
+    ...mergeBackups(current, incoming),
+    loadHistory: mergeSurveyHistory(current.loadHistory ?? [], incoming.loadHistory ?? []),
   };
 }
 
@@ -106,6 +116,7 @@ export function parseAppBackup(raw: string): AppBackup {
     roof: (asRecord(record.roof) as RoofWorkspaceDraft | null) ?? null,
     offGrid: (asRecord(record.offGrid) as OffGridDraft | null) ?? null,
     calculation: (asRecord(record.calculation) as CalculationDraft | null) ?? null,
+    loadHistory: normalizeSurveyHistory(record.loadHistory),
   };
 }
 
@@ -151,13 +162,13 @@ export async function loadAppBackup(): Promise<AppBackup> {
       }
       if (!backupHasUserData(loaded)) {
         const fromFile = await readFile();
-        if (fromFile) loaded = mergeBackups(loaded, fromFile);
+        if (fromFile) loaded = mergeBackupWithHistory(loaded, fromFile);
       }
       const externalRaw = await readExternalBackup();
       if (externalRaw) {
         try {
-          const merged = mergeBackups(loaded, parseAppBackup(externalRaw));
-          if (backupHasUserData(merged)) {
+          const merged = mergeBackupWithHistory(loaded, parseAppBackup(externalRaw));
+          if (backupHasUserData(merged) || merged.loadHistory.length > 0) {
             loaded = merged;
             await AsyncStorage.setItem(APP_BACKUP_KEY, JSON.stringify(loaded));
           }
@@ -177,22 +188,31 @@ export async function loadAppBackup(): Promise<AppBackup> {
   return loadingPromise;
 }
 
-export async function patchAppBackup(
-  partial: Partial<Pick<AppBackup, 'modules' | 'roof' | 'offGrid' | 'calculation'>>,
+let writeQueue: Promise<void> = Promise.resolve();
+
+export function patchAppBackup(
+  partial: Partial<Pick<AppBackup, 'modules' | 'roof' | 'offGrid' | 'calculation' | 'loadHistory'>>,
 ): Promise<AppBackup> {
-  const current = await loadAppBackup();
-  memory = {
-    ...current,
-    ...partial,
-    schema: APP_BACKUP_SCHEMA,
-    app: 'Solar Calculator',
-    savedAt: new Date().toISOString(),
-  };
-  const json = JSON.stringify(memory);
-  await AsyncStorage.setItem(APP_BACKUP_KEY, json);
-  await writeFile(memory).catch(() => undefined);
-  await publishDurableCopy(json);
-  return memory;
+  const job = writeQueue.then(async () => {
+    const current = await loadAppBackup();
+    memory = {
+      ...current,
+      ...partial,
+      schema: APP_BACKUP_SCHEMA,
+      app: 'Solar Calculator',
+      savedAt: new Date().toISOString(),
+    };
+    const json = JSON.stringify(memory);
+    await AsyncStorage.setItem(APP_BACKUP_KEY, json);
+    await writeFile(memory).catch(() => undefined);
+    await publishDurableCopy(json);
+    return memory;
+  });
+  writeQueue = job.then(
+    () => undefined,
+    () => undefined,
+  );
+  return job;
 }
 
 async function readExternalBackup(): Promise<string | null> {

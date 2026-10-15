@@ -18,6 +18,7 @@ on:
       - cursor/menu-placa-backup-f794
       - cursor/menu-gemini-modelo-f794
       - cursor/voltar-versao-anterior-f794
+      - cursor/campos-amperes-historico-f794
       - master
       - main
     paths:
