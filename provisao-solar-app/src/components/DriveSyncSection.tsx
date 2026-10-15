@@ -27,7 +27,7 @@ function cancelled(error: unknown): boolean {
 export function DriveSyncSection() {
   const { colors } = useTheme();
   const [status, setStatus] = useState('Carregando vínculo com o Google Drive.');
-  const [busy, setBusy] = useState<'link' | 'cloud' | 'local' | 'restore' | null>(null);
+  const [busy, setBusy] = useState<'link' | 'cloud' | 'local' | 'restore' | 'browse' | null>(null);
   const [notice, setNotice] = useState('');
   const [askRestore, setAskRestore] = useState(false);
   const [cloudFiles, setCloudFiles] = useState<CloudBackupFile[]>([]);
@@ -91,18 +91,15 @@ export function DriveSyncSection() {
     setCloudFiles([]);
   }
 
-  async function onCloudRestore() {
+  async function browseCloud(kind: 'restore' | 'browse') {
     setAskRestore(false);
-    setBusy('restore');
+    setBusy(kind);
     setNotice('');
     try {
       const files = await listCloudBackups();
       if (files.length === 0) {
         setNotice('Nenhum backup encontrado na pasta do Google Drive.');
-        return;
-      }
-      if (files.length === 1) {
-        await restoreRaw(await readCloudBackup(files[0]));
+        setCloudFiles([]);
         return;
       }
       setCloudFiles(files);
@@ -128,10 +125,11 @@ export function DriveSyncSection() {
 
   return (
     <View style={[styles.box, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <Text style={[styles.title, { color: colors.text }]}>Sincronização / Google Drive</Text>
+      <Text style={[styles.title, { color: colors.text }]}>Google Drive</Text>
+      <Text style={[styles.statusLabel, { color: colors.text }]}>Status da conexão</Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>{status}</Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
-        No seletor, abra o Google Drive e escolha a pasta dos backups. O arquivo local continua disponível neste aparelho.
+        A pasta padrão neste aparelho é CalculadoraSolar_Backups, na raiz do armazenamento ou em Documentos. No seletor do Drive, escolha a pasta dos backups na nuvem.
       </Text>
       <PrimaryButton label="Vincular Google Drive" onPress={onLink} loading={busy === 'link'} disabled={busy !== null} />
       <PrimaryButton
@@ -151,6 +149,14 @@ export function DriveSyncSection() {
         style={styles.gap}
       />
       <PrimaryButton
+        label="Navegar / Restaurar do Google Drive"
+        onPress={() => void browseCloud('browse')}
+        loading={busy === 'browse'}
+        disabled={busy !== null}
+        variant="secondary"
+        style={styles.gap}
+      />
+      <PrimaryButton
         label="Restaurar Backup"
         onPress={() => setAskRestore(true)}
         loading={busy === 'restore'}
@@ -158,6 +164,11 @@ export function DriveSyncSection() {
         variant="ghost"
         style={styles.gap}
       />
+      {cloudFiles.length > 0 ? (
+        <Text style={[styles.body, { color: colors.textSecondary, marginTop: 12 }]}>
+          Toque em um arquivo para atualizar o banco de dados do aplicativo.
+        </Text>
+      ) : null}
       {cloudFiles.map((file) => (
         <Pressable
           key={file.id}
@@ -179,7 +190,7 @@ export function DriveSyncSection() {
         visible={askRestore}
         title="Restaurar Backup"
         message="Buscar o backup na nuvem (Google Drive) ou carregar um arquivo local?"
-        primary={{ label: 'Nuvem (Google Drive)', onPress: () => void onCloudRestore() }}
+        primary={{ label: 'Nuvem (Google Drive)', onPress: () => void browseCloud('restore') }}
         secondary={{ label: 'Arquivo local', onPress: () => void onLocalRestore() }}
         tertiary={{ label: 'Agora não', onPress: () => setAskRestore(false) }}
       />
@@ -198,6 +209,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Outfit_700Bold',
     fontSize: 18,
     marginBottom: 8,
+  },
+  statusLabel: {
+    fontFamily: 'Outfit_600SemiBold',
+    fontSize: 14,
+    marginBottom: 4,
   },
   body: {
     fontFamily: 'DMSans_400Regular',

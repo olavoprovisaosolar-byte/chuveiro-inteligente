@@ -134,16 +134,15 @@ async function writeFile(backup: AppBackup): Promise<void> {
   });
 }
 
-async function readFile(): Promise<AppBackup | null> {
+async function readFileRaw(): Promise<string | null> {
   try {
     const uri = fileUri();
     if (!uri) return null;
     const info = await FileSystem.getInfoAsync(uri);
     if (!info.exists) return null;
-    const raw = await FileSystem.readAsStringAsync(uri, {
+    return await FileSystem.readAsStringAsync(uri, {
       encoding: FileSystem.EncodingType.UTF8,
     });
-    return parseAppBackup(raw);
   } catch {
     return null;
   }
@@ -153,31 +152,41 @@ export async function loadAppBackup(): Promise<AppBackup> {
   if (memory) return memory;
   if (!loadingPromise) {
     loadingPromise = (async () => {
+      const rawSources: string[] = [];
       let loaded = emptyBackup();
       try {
         const raw = await AsyncStorage.getItem(APP_BACKUP_KEY);
-        if (raw) loaded = parseAppBackup(raw);
+        if (raw) {
+          rawSources.push(raw);
+          loaded = parseAppBackup(raw);
+        }
       } catch {
         // segue para o arquivo interno
       }
-      if (!backupHasUserData(loaded)) {
-        const fromFile = await readFile();
-        if (fromFile) loaded = mergeBackupWithHistory(loaded, fromFile);
+      const fromFileRaw = await readFileRaw();
+      if (fromFileRaw) {
+        rawSources.push(fromFileRaw);
+        try {
+          loaded = mergeBackupWithHistory(loaded, parseAppBackup(fromFileRaw));
+        } catch {
+          // arquivo interno ilegível
+        }
       }
       const externalRaw = await readExternalBackup();
       if (externalRaw) {
+        rawSources.push(externalRaw);
         try {
-          const merged = mergeBackupWithHistory(loaded, parseAppBackup(externalRaw));
-          if (backupHasUserData(merged) || merged.loadHistory.length > 0) {
-            loaded = merged;
-            await AsyncStorage.setItem(APP_BACKUP_KEY, JSON.stringify(loaded));
-          }
+          loaded = mergeBackupWithHistory(loaded, parseAppBackup(externalRaw));
         } catch {
           // arquivo público ilegível não apaga o backup interno
         }
       }
+      const root = await import('./rootFolder');
+      loaded = await root.absorbRootFolder(loaded, rawSources);
       memory = loaded;
-      if (backupHasUserData(memory)) {
+      if (backupHasUserData(memory) || memory.loadHistory.length > 0) {
+        await AsyncStorage.setItem(APP_BACKUP_KEY, JSON.stringify(memory));
+        await writeFile(memory).catch(() => undefined);
         void nudgeSystemBackup();
       }
       return memory;
@@ -231,6 +240,12 @@ async function publishDurableCopy(json: string): Promise<void> {
     durable.requestSystemBackup();
   } catch {
     // a cópia interna já foi gravada
+  }
+  try {
+    const root = await import('./rootFolder');
+    await root.writeRootBackupFile(json, APP_BACKUP_FILE);
+  } catch {
+    // a pasta CalculadoraSolar_Backups será tentada de novo na próxima abertura
   }
 }
 
