@@ -24,6 +24,7 @@ function withManifestFlags(config) {
     const app = next.modResults.manifest.application?.[0];
     if (app?.$) {
       app.$['android:allowBackup'] = 'true';
+      app.$['android:requestLegacyExternalStorage'] = 'true';
       app.$['android:hasFragileUserData'] = 'true';
       app.$['android:fullBackupContent'] = '@xml/solar_backup_rules';
       app.$['android:dataExtractionRules'] = '@xml/solar_data_extraction_rules';

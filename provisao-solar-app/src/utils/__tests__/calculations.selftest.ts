@@ -15,6 +15,14 @@ import { explainProviderError } from '../aiErrors';
 import { datasheetIsComplete, parseModuleDatasheet } from '../moduleDatasheet';
 import { mergeBackups, type MergeableBackup } from '../../services/backupMerge';
 import { mergeSurveyHistory, normalizeSurveyHistory, searchSurveys } from '../surveyHistory';
+import {
+  migrationFileName,
+  newestBackupRaw,
+  ROOT_BACKUP_FOLDER,
+  safeBackupFileName,
+  shouldMigrateExistingData,
+  startupRestoreMode,
+} from '../../services/rootBackupPolicy';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
 import {
@@ -371,6 +379,36 @@ const renamed = mergeSurveyHistory(clients, [
 ]);
 assert(renamed.length === 1 && renamed[0]?.clientName === 'Francisco Souza', 'Salvar de novo atualiza o mesmo cliente');
 assert(mergeSurveyHistory(clients, []).length === 1, 'Lista vazia não apaga os clientes salvos');
+
+assert(ROOT_BACKUP_FOLDER === 'CalculadoraSolar_Backups', 'Pasta raiz dos backups');
+assert(
+  startupRestoreMode({ activeHasData: true, folderBackupFound: false }) === 'silent',
+  'Banco ativo abre direto',
+);
+assert(
+  startupRestoreMode({ activeHasData: false, folderBackupFound: true }) === 'silent',
+  'Arquivo na pasta raiz abre direto',
+);
+assert(
+  startupRestoreMode({ activeHasData: false, folderBackupFound: false }) === 'reception',
+  'Instalação limpa mostra a recepção',
+);
+assert(shouldMigrateExistingData(false, true), 'Dados antigos geram cópia na pasta nova');
+assert(!shouldMigrateExistingData(true, true), 'Migração já feita não repete a cópia de origem');
+assert(!shouldMigrateExistingData(false, false), 'Instalação vazia não cria arquivo de migração');
+assert(
+  migrationFileName(new Date(2026, 9, 15, 14, 3, 7)) ===
+    'solar-calculator-backup-migracao-2026-10-15-140307.json',
+  'Nome da cópia de migração',
+);
+assert(safeBackupFileName('../solar-calculator-backup.json') === 'solar-calculator-backup.json', 'Nome de arquivo sem pasta');
+const older = '{"savedAt":"2026-01-01T00:00:00.000Z","modules":[{"id":"a"}]}';
+const newer = '{"savedAt":"2026-06-01T00:00:00.000Z","modules":[{"id":"b"}]}';
+const picked = newestBackupRaw([older, '{"savedAt":"2026-08-01T00:00:00.000Z","modules":[]}', newer], (raw) => {
+  const parsed = JSON.parse(raw) as { savedAt: string; modules: unknown[] };
+  return { savedAt: parsed.savedAt, hasData: parsed.modules.length > 0 };
+});
+assert(picked === newer, 'Autodiscovery escolhe o backup mais recente com dados');
 
 console.log('✅ Self-test de cálculos OK');
 console.log(
