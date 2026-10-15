@@ -192,7 +192,8 @@ export async function absorbRootFolder(loaded: AppBackup, rawSources: readonly s
   if (shouldMigrateExistingData(alreadyMigrated, backupHasUserData(next))) {
     const seen = new Set<string>();
     let index = 1;
-    for (const raw of rawSources) {
+    const sources = discovered ? [...rawSources, discovered] : [...rawSources];
+    for (const raw of sources) {
       const trimmed = raw.trim();
       if (!trimmed || seen.has(trimmed)) continue;
       seen.add(trimmed);
