@@ -14,7 +14,7 @@ import {
 import { explainProviderError } from '../aiErrors';
 import { datasheetIsComplete, parseModuleDatasheet } from '../moduleDatasheet';
 import { mergeBackups, type MergeableBackup } from '../../services/backupMerge';
-import { mergeSurveyHistory, normalizeSurveyHistory, searchSurveys } from '../surveyHistory';
+import { mergeSurveyHistory, normalizeSurveyHistory, removeSurvey, searchSurveys } from '../surveyHistory';
 import {
   migrationFileName,
   newestBackupRaw,
@@ -379,6 +379,23 @@ const renamed = mergeSurveyHistory(clients, [
 ]);
 assert(renamed.length === 1 && renamed[0]?.clientName === 'Francisco Souza', 'Salvar de novo atualiza o mesmo cliente');
 assert(mergeSurveyHistory(clients, []).length === 1, 'Lista vazia não apaga os clientes salvos');
+assert(searchSurveys(clients, '').length === 1, 'Busca vazia lista todos os clientes');
+const joao = normalizeSurveyHistory([
+  {
+    id: 'joao-1',
+    nomeCliente: 'João',
+    dataCadastro: '2026-10-15T03:34:03.000Z',
+    fases: { A: '20', B: '15', C: '', neutro: '8' },
+    cargas: { supply: 'biphasic', utilization: 0.8 },
+  },
+]);
+assert(joao.length === 1 && joao[0]?.clientName === 'João', 'Cadastro estruturado guarda o nome');
+assert(joao[0]?.fases.A === '20' && joao[0]?.fases.neutro === '8', 'Cadastro estruturado guarda as fases');
+assert(joao[0]?.cargas.supply === 'biphasic', 'Cadastro estruturado guarda a carga');
+assert(searchSurveys(joao, 'joao').length === 1, 'Busca por joao encontra João');
+assert(searchSurveys(joao, 'JOÃO').length === 1, 'Busca ignora maiúsculas e acento');
+assert(searchSurveys([...clients, ...joao], 'maria').length === 0, 'Nome ausente não entra na lista');
+assert(removeSurvey([...clients, ...joao], 'joao-1').length === 1, 'Excluir tira só o cliente escolhido');
 
 assert(ROOT_BACKUP_FOLDER === 'CalculadoraSolar_Backups', 'Pasta raiz dos backups');
 assert(

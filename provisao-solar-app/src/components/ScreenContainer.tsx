@@ -18,6 +18,7 @@ type Props = {
   scroll?: boolean;
   contentStyle?: ViewStyle;
   rightSlot?: React.ReactNode;
+  scrollRef?: React.Ref<ScrollView>;
 };
 
 export function ScreenContainer({
@@ -27,6 +28,7 @@ export function ScreenContainer({
   scroll = true,
   contentStyle,
   rightSlot,
+  scrollRef,
 }: Props) {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
@@ -59,6 +61,7 @@ export function ScreenContainer({
       <SafeAreaView style={styles.flex} edges={['top', 'left', 'right']}>
         {scroll ? (
           <ScrollView
+            ref={scrollRef}
             contentContainerStyle={[styles.scroll, isLandscape && styles.scrollLandscape]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}

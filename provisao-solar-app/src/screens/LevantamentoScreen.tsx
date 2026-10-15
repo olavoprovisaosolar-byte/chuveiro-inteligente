@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ActionDialog } from '../components/ActionDialog';
 import { CurrentAmpCard } from '../components/CurrentAmpCard';
 import { FieldLabel } from '../components/InfoTip';
@@ -12,7 +12,7 @@ import { LoadShareChart } from '../components/LoadShareChart';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { loadAppBackup, patchAppBackup, subscribeAppBackup } from '../services/appBackup';
-import { loadSurveyHistory, rememberSurvey, replaceSurveyHistory } from '../services/surveyStore';
+import { forgetSurvey, loadSurveyHistory, rememberSurvey, replaceSurveyHistory, subscribeSurveyHistory } from '../services/surveyStore';
 import { useTheme } from '../theme/ThemeContext';
 import { formatNumber, parseLocaleNumber } from '../utils/calculations';
 import { mergeSurveyHistory, normalizeSurveyHistory, searchSurveys, SurveyRecord } from '../utils/surveyHistory';
@@ -49,6 +49,12 @@ function todayPtBr(): string {
   const day = String(now.getDate()).padStart(2, '0');
   const month = String(now.getMonth() + 1).padStart(2, '0');
   return `${day}/${month}/${now.getFullYear()}`;
+}
+
+function formatSavedAt(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString('pt-BR');
 }
 
 const FU_STEPS = [0.6, 0.7, 0.8, 0.9] as const;
@@ -101,6 +107,9 @@ export function LevantamentoScreen() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
   const [pdfChoiceOpen, setPdfChoiceOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<SurveyRecord | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const historyReady = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,10 +142,10 @@ export function LevantamentoScreen() {
       const local = await loadSurveyHistory();
       if (cancelled) return;
       const merged = mergeSurveyHistory(backup.loadHistory ?? [], local);
-      setHistory(merged);
+      if (!historyReady.current) setHistory(merged);
       if (JSON.stringify(merged) !== JSON.stringify(local)) {
         const stored = await replaceSurveyHistory(merged);
-        if (!cancelled) setHistory(stored);
+        if (!cancelled && !historyReady.current) setHistory(stored);
       }
       if (!cancelled) setBackupReady(true);
     });
@@ -202,8 +211,8 @@ export function LevantamentoScreen() {
 
   useEffect(() => {
     return subscribeAppBackup(() => {
-      void loadAppBackup().then((backup) => {
-        setHistory(normalizeSurveyHistory(backup.loadHistory));
+      void Promise.all([loadAppBackup(), loadSurveyHistory()]).then(([backup, local]) => {
+        setHistory(mergeSurveyHistory(normalizeSurveyHistory(backup.loadHistory), local));
         if (!backup.offGrid) return;
         const draft = backup.offGrid;
         if (isOneOf(draft.supply, SUPPLY_VALUES)) setSupply(draft.supply);
@@ -230,6 +239,8 @@ export function LevantamentoScreen() {
       });
     });
   }, []);
+
+  useEffect(() => subscribeSurveyHistory(setHistory), []);
 
   const draft = useMemo(() => {
     const autonomyRaw = parseLocaleNumber(autonomyText);
@@ -404,32 +415,42 @@ export function LevantamentoScreen() {
       return;
     }
     setSaving(true);
+    historyReady.current = true;
     try {
-      const record: SurveyRecord = {
-        id: editingId ?? `carga-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        savedAt: new Date().toISOString(),
-        clientName: name,
-        clientLocation: clientLocation.trim(),
-        surveyDate,
-        supply,
-        monoVoltage,
-        triPair,
-        currentAText,
-        currentBText,
-        currentCText,
-        currentNeutralText,
-        utilization,
-        acOutput,
-        inverterBus,
-        busVoltage,
-        busTouched,
-        autonomyText,
-        autonomyUnit,
-        useDod,
-        dodText,
-        batteryModelId,
-        efficiencyText,
-      };
+      const savedAt = new Date().toISOString();
+      const [record] = normalizeSurveyHistory([
+        {
+          id: editingId ?? `carga-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          savedAt,
+          dataCadastro: savedAt,
+          nomeCliente: name,
+          clientName: name,
+          clientLocation: clientLocation.trim(),
+          surveyDate,
+          supply,
+          monoVoltage,
+          triPair,
+          currentAText,
+          currentBText,
+          currentCText,
+          currentNeutralText,
+          utilization,
+          acOutput,
+          inverterBus,
+          busVoltage,
+          busTouched,
+          autonomyText,
+          autonomyUnit,
+          useDod,
+          dodText,
+          batteryModelId,
+          efficiencyText,
+        },
+      ]);
+      if (!record) {
+        Alert.alert('Não foi possível salvar', 'Informe o nome do cliente ou do projeto.');
+        return;
+      }
       const next = await rememberSurvey(record);
       setHistory(next);
       const updated = Boolean(editingId);
@@ -438,11 +459,27 @@ export function LevantamentoScreen() {
         ? 'Cadastro atualizado. O formulário foi limpo para um novo cliente.'
         : 'Cadastro salvo. O formulário foi limpo para um novo cliente.';
       setNotice(confirmation);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       Alert.alert('Cadastro salvo', confirmation);
     } catch {
       Alert.alert('Não foi possível salvar', 'Tente novamente. Os dados digitados continuam na tela.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onConfirmDelete() {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setPendingDelete(null);
+    historyReady.current = true;
+    try {
+      const next = await forgetSurvey(target.id);
+      setHistory(next);
+      if (editingId === target.id) resetForm();
+      setNotice(`Cadastro de ${target.clientName} excluído.`);
+    } catch {
+      Alert.alert('Não foi possível excluir', 'O cadastro continua na lista.');
     }
   }
 
@@ -452,17 +489,18 @@ export function LevantamentoScreen() {
     <ScreenContainer
       title="Levantamento"
       subtitle="Medição com alicate e dimensionamento off-grid / retrofit."
+      scrollRef={scrollRef}
     >
       {notice ? <Banner tone="success" text={notice} /> : null}
       <Section
         title="Consultar / Buscar Clientes"
-        hint="Encontre um cadastro pelo nome, abra para corrigir e salve de novo."
+        hint="A lista mostra todos os clientes salvos. Digite o nome para filtrar na hora."
       >
         <InputField
           label="Buscar cliente"
           value={searchText}
           onChangeText={setSearchText}
-          placeholder="Ex.: Francisco"
+          placeholder="Ex.: João"
           autoCapitalize="words"
         />
         {editingId ? (
@@ -473,16 +511,24 @@ export function LevantamentoScreen() {
         {history.length === 0 ? (
           <Text style={[styles.pending, { color: colors.textSecondary }]}>Nenhum cadastro salvo ainda.</Text>
         ) : visibleSurveys.length === 0 ? (
-          <Text style={[styles.pending, { color: colors.textSecondary }]}>Nenhum cliente encontrado.</Text>
+          <Text style={[styles.pending, { color: colors.textSecondary }]}>
+            Nenhum cliente encontrado com esse nome.
+          </Text>
         ) : (
-          visibleSurveys.slice(0, 40).map((record) => (
-            <View key={record.id} style={[styles.historyRow, { borderColor: colors.border }]}>
-              <Text style={[styles.historyTitle, { color: colors.text }]}>{record.clientName}</Text>
+          visibleSurveys.map((record) => (
+            <View key={record.id} style={[styles.historyRow, { borderColor: colors.border, backgroundColor: colors.background }]}>
+              <Text style={[styles.historyTitle, { color: colors.text }]}>{record.nomeCliente || record.clientName}</Text>
               <Text style={[styles.historyMeta, { color: colors.textSecondary }]}>
-                {record.surveyDate || 'Sem data'} · {record.clientLocation || 'Sem endereço'} ·{' '}
-                {new Date(record.savedAt).toLocaleString('pt-BR')}
+                Salvo em {formatSavedAt(record.dataCadastro || record.savedAt)}
+                {record.clientLocation ? ` · ${record.clientLocation}` : ''}
               </Text>
-              <PrimaryButton label="Abrir" onPress={() => openSurvey(record)} variant="ghost" />
+              <PrimaryButton label="Carregar / Editar" onPress={() => openSurvey(record)} variant="secondary" />
+              <PrimaryButton
+                label="Excluir"
+                onPress={() => setPendingDelete(record)}
+                variant="danger"
+                style={styles.deleteBtn}
+              />
             </View>
           ))
         )}
@@ -956,6 +1002,17 @@ export function LevantamentoScreen() {
           },
         }}
       />
+      <ActionDialog
+        visible={pendingDelete != null}
+        title="Excluir cadastro"
+        message={
+          pendingDelete
+            ? `Excluir o cadastro de ${pendingDelete.clientName}? O registro sai da lista deste aparelho.`
+            : ''
+        }
+        primary={{ label: 'Excluir', onPress: () => void onConfirmDelete() }}
+        secondary={{ label: 'Cancelar', onPress: () => setPendingDelete(null) }}
+      />
     </ScreenContainer>
   );
 }
@@ -1410,6 +1467,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
   },
+  deleteBtn: { marginTop: 8 },
   exportBtn: { marginBottom: 8 },
   fileName: {
     fontFamily: 'DMSans_400Regular',
