@@ -96,11 +96,13 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minWidth: 0,
     fontFamily: 'Outfit_600SemiBold',
     fontSize: 22,
     paddingVertical: 8,
   },
   suffix: {
+    flexShrink: 0,
     fontFamily: 'Outfit_700Bold',
     fontSize: 20,
     marginLeft: 8,
