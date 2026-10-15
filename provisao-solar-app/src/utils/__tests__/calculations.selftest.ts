@@ -14,6 +14,7 @@ import {
 import { explainProviderError } from '../aiErrors';
 import { datasheetIsComplete, parseModuleDatasheet } from '../moduleDatasheet';
 import { mergeBackups, type MergeableBackup } from '../../services/backupMerge';
+import { mergeSurveyHistory, normalizeSurveyHistory, searchSurveys } from '../surveyHistory';
 import { computeRoofLayouts } from '../roofLayout';
 import { PRESET_MODULES } from '../../constants/modules';
 import {
@@ -352,6 +353,24 @@ const kept = mergeBackups(savedDevice, {
   savedAt: '2026-12-01T00:00:00.000Z',
 });
 assert(kept.modules.length === 1, 'Cópia vazia mais nova não apaga a placa');
+
+const clients = normalizeSurveyHistory([
+  {
+    id: 'casa-1',
+    savedAt: '2026-01-01T00:00:00.000Z',
+    clientName: 'Francisco',
+    surveyDate: '01/01/2026',
+  },
+  { id: '', savedAt: '2026-01-01T00:00:00.000Z', clientName: 'Sem id' },
+]);
+assert(clients.length === 1 && clients[0]?.clientName === 'Francisco', 'Histórico ignora cadastro sem id');
+assert(searchSurveys(clients, 'fran').length === 1, 'Busca encontra Francisco');
+assert(searchSurveys(clients, 'ana').length === 0, 'Busca sem o nome não traz cliente');
+const renamed = mergeSurveyHistory(clients, [
+  { ...clients[0], savedAt: '2026-02-01T00:00:00.000Z', clientName: 'Francisco Souza' },
+]);
+assert(renamed.length === 1 && renamed[0]?.clientName === 'Francisco Souza', 'Salvar de novo atualiza o mesmo cliente');
+assert(mergeSurveyHistory(clients, []).length === 1, 'Lista vazia não apaga os clientes salvos');
 
 console.log('✅ Self-test de cálculos OK');
 console.log(

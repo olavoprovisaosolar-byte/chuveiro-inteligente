@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { DriveSyncSection } from '../components/DriveSyncSection';
 import { InputField } from '../components/InputField';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenContainer } from '../components/ScreenContainer';
@@ -145,6 +146,8 @@ export function ConfigAiScreen() {
         </View>
       ) : null}
 
+      <DriveSyncSection />
+
       <View
         style={[
           styles.info,
@@ -215,6 +218,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 14,
+    marginTop: 16,
     marginBottom: 24,
   },
   infoTitle: {
