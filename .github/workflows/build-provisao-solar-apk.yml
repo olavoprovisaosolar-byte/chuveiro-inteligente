@@ -23,6 +23,7 @@ on:
       - cursor/lista-clientes-f794
       - cursor/salvar-cadastro-pdf-f794
       - cursor/consulta-dropdown-backup-f794
+      - cursor/apk-nome-versao-f794
       - master
       - main
     paths:
@@ -96,14 +97,15 @@ jobs:
         run: |
           mkdir -p ../artifact
           APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
-          echo "Using APK: $APK_PATH"
-          cp "$APK_PATH" ../artifact/SolarCalculator.apk
-          ls -lh ../artifact/SolarCalculator.apk
-          unzip -l ../artifact/SolarCalculator.apk | grep -Ei 'index\.(android\.)?bundle|\.hbc|assets/.*js' | head -40 || true
+          APK_NAME=$(node scripts/apk-file-name.mjs)
+          echo "Using APK: $APK_PATH as $APK_NAME"
+          cp "$APK_PATH" "../artifact/${APK_NAME}"
+          ls -lh "../artifact/${APK_NAME}"
+          unzip -l "../artifact/${APK_NAME}" | grep -Ei 'index\.(android\.)?bundle|\.hbc|assets/.*js' | head -40 || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: solar-calculator-apk
-          path: artifact/SolarCalculator.apk
+          path: artifact/SolarCalculator-v*.apk
           retention-days: 30

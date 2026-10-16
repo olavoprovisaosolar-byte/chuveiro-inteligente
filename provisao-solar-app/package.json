@@ -1,6 +1,6 @@
 {
   "name": "solar-calculator",
-  "version": "1.0.42",
+  "version": "1.0.43",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
@@ -43,6 +43,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test:calc": "tsx src/utils/__tests__/calculations.selftest.ts",
+    "apk:name": "node scripts/apk-file-name.mjs",
     "build:apk": "eas build -p android --profile preview"
   },
   "private": true
