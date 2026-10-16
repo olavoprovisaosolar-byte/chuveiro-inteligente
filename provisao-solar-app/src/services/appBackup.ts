@@ -245,7 +245,7 @@ async function publishDurableCopy(json: string): Promise<void> {
     const root = await import('./rootFolder');
     await root.writeRootBackupFile(json, APP_BACKUP_FILE);
   } catch {
-    // a pasta CalculadoraSolar_Backups será tentada de novo na próxima abertura
+    // Meus Documentos/Calculadora Solar/Backups será tentada de novo na próxima abertura
   }
 }
 

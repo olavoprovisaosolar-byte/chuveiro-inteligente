@@ -14,10 +14,11 @@ import {
 import { explainProviderError } from '../aiErrors';
 import { datasheetIsComplete, parseModuleDatasheet } from '../moduleDatasheet';
 import { mergeBackups, type MergeableBackup } from '../../services/backupMerge';
-import { mergeSurveyHistory, normalizeSurveyHistory, removeSurvey, searchSurveys } from '../surveyHistory';
+import { mergeSurveyHistory, normalizeSurveyHistory, removeSurvey, searchSurveys, shouldShowClientLookup } from '../surveyHistory';
 import {
   migrationFileName,
   newestBackupRaw,
+  ROOT_BACKUP_DISPLAY,
   ROOT_BACKUP_FOLDER,
   safeBackupFileName,
   shouldMigrateExistingData,
@@ -397,7 +398,15 @@ assert(searchSurveys(joao, 'JOÃO').length === 1, 'Busca ignora maiúsculas e ac
 assert(searchSurveys([...clients, ...joao], 'maria').length === 0, 'Nome ausente não entra na lista');
 assert(removeSurvey([...clients, ...joao], 'joao-1').length === 1, 'Excluir tira só o cliente escolhido');
 
-assert(ROOT_BACKUP_FOLDER === 'CalculadoraSolar_Backups', 'Pasta raiz dos backups');
+assert(ROOT_BACKUP_FOLDER === 'Calculadora Solar/Backups', 'Pasta dos backups em Documentos');
+assert(
+  ROOT_BACKUP_DISPLAY === 'Meus Documentos/Calculadora Solar/Backups',
+  'Caminho mostrado ao usuário',
+);
+assert(!shouldShowClientLookup(false, ''), 'Lista de clientes fechada antes do toque');
+assert(shouldShowClientLookup(true, ''), 'Toque na busca abre a lista');
+assert(shouldShowClientLookup(false, 'Lu'), 'Digitar o nome abre a lista');
+assert(!shouldShowClientLookup(false, '   '), 'Espaço vazio não abre a lista');
 assert(
   startupRestoreMode({ activeHasData: true, folderBackupFound: false }) === 'silent',
   'Banco ativo abre direto',

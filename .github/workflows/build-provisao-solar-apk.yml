@@ -22,6 +22,7 @@ on:
       - cursor/pasta-backup-raiz-f794
       - cursor/lista-clientes-f794
       - cursor/salvar-cadastro-pdf-f794
+      - cursor/consulta-dropdown-backup-f794
       - master
       - main
     paths:

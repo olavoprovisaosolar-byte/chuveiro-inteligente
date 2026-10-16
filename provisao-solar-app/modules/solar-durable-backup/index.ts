@@ -6,6 +6,7 @@ type SolarDurableBackupNative = {
   readPublicBackup: () => string | null;
   writeRootBackup: (json: string, fileName: string) => string;
   readRootBackups: () => string;
+  readDedicatedBackup: () => string | null;
 };
 
 const native = requireOptionalNativeModule<SolarDurableBackupNative>('SolarDurableBackup');
@@ -46,6 +47,15 @@ export async function writeRootBackup(json: string, fileName: string): Promise<s
 export async function readRootBackups(): Promise<string | null> {
   try {
     const raw = native?.readRootBackups();
+    return raw && raw.trim() ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function readDedicatedBackup(): Promise<string | null> {
+  try {
+    const raw = native?.readDedicatedBackup();
     return raw && raw.trim() ? raw : null;
   } catch {
     return null;

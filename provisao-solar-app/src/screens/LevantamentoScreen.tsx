@@ -15,7 +15,7 @@ import { loadAppBackup, patchAppBackup, subscribeAppBackup } from '../services/a
 import { forgetSurvey, loadSurveyHistory, rememberSurvey, replaceSurveyHistory, subscribeSurveyHistory } from '../services/surveyStore';
 import { useTheme } from '../theme/ThemeContext';
 import { formatNumber, parseLocaleNumber } from '../utils/calculations';
-import { mergeSurveyHistory, normalizeSurveyHistory, searchSurveys, SurveyRecord } from '../utils/surveyHistory';
+import { mergeSurveyHistory, normalizeSurveyHistory, searchSurveys, shouldShowClientLookup, SurveyRecord } from '../utils/surveyHistory';
 import {
   AcOutputTopology,
   BatteryModelId,
@@ -104,6 +104,7 @@ export function LevantamentoScreen() {
   const [history, setHistory] = useState<SurveyRecord[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
+  const [lookupOpen, setLookupOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
   const [pdfChoiceOpen, setPdfChoiceOpen] = useState(false);
@@ -111,6 +112,11 @@ export function LevantamentoScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const historyReady = useRef(false);
   const draftIdRef = useRef<string | null>(null);
+  const lookupBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (lookupBlurTimer.current) clearTimeout(lookupBlurTimer.current);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -477,6 +483,23 @@ export function LevantamentoScreen() {
     setNotice(`Cadastro de ${record.clientName} aberto para edição.`);
   }, []);
 
+  const openLookup = useCallback(() => {
+    if (lookupBlurTimer.current) clearTimeout(lookupBlurTimer.current);
+    setLookupOpen(true);
+  }, []);
+
+  const closeLookupSoon = useCallback(() => {
+    if (lookupBlurTimer.current) clearTimeout(lookupBlurTimer.current);
+    lookupBlurTimer.current = setTimeout(() => setLookupOpen(false), 250);
+  }, []);
+
+  const selectClient = useCallback((record: SurveyRecord) => {
+    if (lookupBlurTimer.current) clearTimeout(lookupBlurTimer.current);
+    openSurvey(record);
+    setSearchText('');
+    setLookupOpen(false);
+  }, [openSurvey]);
+
   async function onSave() {
     const name = clientName.trim();
     if (!name) {
@@ -518,6 +541,8 @@ export function LevantamentoScreen() {
   }
 
   const visibleSurveys = searchSurveys(history, searchText);
+  const lookupVisible = shouldShowClientLookup(lookupOpen, searchText);
+  const openRecord = editingId ? history.find((item) => item.id === editingId) ?? null : null;
 
   return (
     <ScreenContainer
@@ -528,44 +553,62 @@ export function LevantamentoScreen() {
       {notice ? <Banner tone="success" text={notice} /> : null}
       <Section
         title="Consultar / Buscar Clientes"
-        hint="A lista mostra todos os clientes salvos. Digite o nome para filtrar na hora."
+        hint="Toque na busca ou comece a digitar o nome. A lista abre com os clientes encontrados e fecha ao escolher um."
       >
         <InputField
           label="Buscar cliente"
           value={searchText}
-          onChangeText={setSearchText}
-          placeholder="Ex.: João"
+          onChangeText={(value) => {
+            setSearchText(value);
+            openLookup();
+          }}
+          onFocus={openLookup}
+          onBlur={closeLookupSoon}
+          placeholder="Ex.: Olavo"
           autoCapitalize="words"
         />
-        {editingId ? (
-          <Text style={[styles.fileName, { color: colors.text }]}>
-            Edição aberta. Salvar atualiza este cliente.
-          </Text>
+        {openRecord ? (
+          <>
+            <Text style={[styles.fileName, { color: colors.text }]}>
+              Edição aberta: {openRecord.nomeCliente || openRecord.clientName}. Salvar atualiza este cliente.
+            </Text>
+            <PrimaryButton
+              label="Excluir"
+              onPress={() => setPendingDelete(openRecord)}
+              variant="danger"
+              style={styles.deleteBtn}
+            />
+          </>
         ) : null}
-        {history.length === 0 ? (
-          <Text style={[styles.pending, { color: colors.textSecondary }]}>Nenhum cadastro salvo ainda.</Text>
-        ) : visibleSurveys.length === 0 ? (
-          <Text style={[styles.pending, { color: colors.textSecondary }]}>
-            Nenhum cliente encontrado com esse nome.
-          </Text>
-        ) : (
-          visibleSurveys.map((record) => (
-            <View key={record.id} style={[styles.historyRow, { borderColor: colors.border, backgroundColor: colors.background }]}>
-              <Text style={[styles.historyTitle, { color: colors.text }]}>{record.nomeCliente || record.clientName}</Text>
-              <Text style={[styles.historyMeta, { color: colors.textSecondary }]}>
-                Salvo em {formatSavedAt(record.dataCadastro || record.savedAt)}
-                {record.clientLocation ? ` · ${record.clientLocation}` : ''}
+        {lookupVisible ? (
+          <View style={[styles.lookupPanel, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+            {history.length === 0 ? (
+              <Text style={[styles.lookupEmpty, { color: colors.textSecondary }]}>Nenhum cadastro salvo ainda.</Text>
+            ) : visibleSurveys.length === 0 ? (
+              <Text style={[styles.lookupEmpty, { color: colors.textSecondary }]}>
+                Nenhum cliente encontrado com esse nome.
               </Text>
-              <PrimaryButton label="Carregar / Editar" onPress={() => openSurvey(record)} variant="secondary" />
-              <PrimaryButton
-                label="Excluir"
-                onPress={() => setPendingDelete(record)}
-                variant="danger"
-                style={styles.deleteBtn}
-              />
-            </View>
-          ))
-        )}
+            ) : (
+              <ScrollView style={styles.lookupScroll} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                {visibleSurveys.map((record) => (
+                  <Pressable
+                    key={record.id}
+                    accessibilityRole="button"
+                    onPressIn={() => selectClient(record)}
+                    style={[styles.lookupRow, { borderBottomColor: colors.border }]}
+                  >
+                    <Text style={[styles.lookupName, { color: colors.text }]}>
+                      {record.nomeCliente || record.clientName}
+                    </Text>
+                    <Text style={[styles.lookupMeta, { color: colors.textSecondary }]}>
+                      Salvo em {formatSavedAt(record.dataCadastro || record.savedAt)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        ) : null}
       </Section>
       <Section
         title="Identificação do cliente"
@@ -1489,23 +1532,38 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   actionItem: { flex: 1 },
-  historyRow: {
+  lookupPanel: {
     borderWidth: 1,
     borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
+    marginTop: -4,
+    marginBottom: 12,
+    overflow: 'hidden',
   },
-  historyTitle: {
+  lookupScroll: {
+    maxHeight: 220,
+  },
+  lookupRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  lookupName: {
     fontFamily: 'Outfit_700Bold',
     fontSize: 16,
     lineHeight: 22,
   },
-  historyMeta: {
+  lookupMeta: {
     fontFamily: 'DMSans_400Regular',
     fontSize: 12,
     lineHeight: 18,
-    marginTop: 4,
-    marginBottom: 8,
+    marginTop: 2,
+  },
+  lookupEmpty: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 14,
+    lineHeight: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   deleteBtn: { marginTop: 8 },
   exportBtn: { marginBottom: 8 },

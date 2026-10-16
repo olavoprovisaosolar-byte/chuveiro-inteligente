@@ -1,4 +1,5 @@
-export const ROOT_BACKUP_FOLDER = 'CalculadoraSolar_Backups';
+export const ROOT_BACKUP_FOLDER = 'Calculadora Solar/Backups';
+export const ROOT_BACKUP_DISPLAY = 'Meus Documentos/Calculadora Solar/Backups';
 export const ROOT_BACKUP_FILE = 'solar-calculator-backup.json';
 
 export type StartupRestore = 'silent' | 'reception';

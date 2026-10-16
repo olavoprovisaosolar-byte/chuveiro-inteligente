@@ -138,6 +138,30 @@ export async function folderContainsUserBackup(): Promise<boolean> {
   return newestBackupRaw(raws, inspect) != null;
 }
 
+export async function readDedicatedBackupRaw(): Promise<string | null> {
+  try {
+    const durable = await import('solar-durable-backup');
+    const raw = await durable.readDedicatedBackup();
+    if (raw?.trim()) return raw;
+  } catch {
+    // sem módulo nativo a cópia segue no índice da pasta
+  }
+  const indexed = (await readFolderIndex())[ROOT_BACKUP_FILE];
+  if (indexed?.trim()) return indexed;
+  if (Platform.OS === 'web') return null;
+  const dir = sandboxDir();
+  if (!dir) return null;
+  try {
+    const uri = `${dir}${ROOT_BACKUP_FILE}`;
+    const info = await FileSystem.getInfoAsync(uri);
+    if (!info.exists) return null;
+    const raw = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.UTF8 });
+    return raw.trim() ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function writeRootBackupFile(json: string, fileName: string): Promise<boolean> {
   const safeName = safeBackupFileName(fileName);
   let wrote = false;

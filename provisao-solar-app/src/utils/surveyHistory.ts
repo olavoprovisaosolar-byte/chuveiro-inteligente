@@ -163,6 +163,10 @@ export function searchSurveys(records: SurveyRecord[], query: string): SurveyRec
   return records.filter((item) => foldClientName(item.nomeCliente || item.clientName).includes(needle));
 }
 
+export function shouldShowClientLookup(focused: boolean, query: string): boolean {
+  return focused || query.trim().length > 0;
+}
+
 export function removeSurvey(records: SurveyRecord[], id: string): SurveyRecord[] {
   return records.filter((item) => item.id !== id);
 }

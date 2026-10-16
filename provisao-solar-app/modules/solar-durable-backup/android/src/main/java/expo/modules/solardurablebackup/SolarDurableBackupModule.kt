@@ -14,10 +14,12 @@ import org.json.JSONArray
 import java.io.File
 
 private const val BACKUP_FILE_NAME = "solar-calculator-backup.json"
+private const val DOCUMENTS_SUBDIR = "Calculadora Solar/Backups"
+private const val DOCUMENTS_RELATIVE = "Documents/Calculadora Solar/Backups/"
 private const val LEGACY_RELATIVE_PATH = "Download/SolarCalculator/"
-private const val ROOT_FOLDER = "CalculadoraSolar_Backups"
-private const val DOCUMENTS_RELATIVE = "Documents/CalculadoraSolar_Backups/"
-private const val DOWNLOADS_RELATIVE = "Download/CalculadoraSolar_Backups/"
+private const val LEGACY_ROOT_FOLDER = "CalculadoraSolar_Backups"
+private const val LEGACY_DOCUMENTS_RELATIVE = "Documents/CalculadoraSolar_Backups/"
+private const val LEGACY_DOWNLOADS_RELATIVE = "Download/CalculadoraSolar_Backups/"
 
 class SolarDurableBackupModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -48,20 +50,18 @@ class SolarDurableBackupModule : Module() {
       val context = appContext.reactContext ?: return@Function "[]"
       readRootBackups(context)
     }
+
+    Function("readDedicatedBackup") {
+      val context = appContext.reactContext ?: return@Function null
+      readDedicated(context)
+    }
   }
 }
 
 private data class Candidate(val modified: Long, val savedAt: String, val json: String)
 
 private fun writePublic(context: Context, json: String): String {
-  val mediaOk = writeMediaStore(context, MediaStoreKind.DOWNLOADS, LEGACY_RELATIVE_PATH, BACKUP_FILE_NAME, json)
-  val fileOk = writeLegacyDownload(json)
-  return when {
-    mediaOk && fileOk -> "downloads"
-    mediaOk -> "mediastore"
-    fileOk -> "arquivo"
-    else -> "interno"
-  }
+  return writeDedicated(context, json, BACKUP_FILE_NAME)
 }
 
 private enum class MediaStoreKind {
@@ -70,26 +70,18 @@ private enum class MediaStoreKind {
 }
 
 private fun writeRootFolder(context: Context, json: String, fileName: String): String {
+  return writeDedicated(context, json, fileName)
+}
+
+private fun writeDedicated(context: Context, json: String, fileName: String): String {
   val safeName = safeJsonName(fileName)
-  val rootOk = writePlainDir(Environment.getExternalStorageDirectory(), ROOT_FOLDER, safeName, json)
   val documentsOk = writePlainDir(
     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
-    ROOT_FOLDER,
+    DOCUMENTS_SUBDIR,
     safeName,
     json,
   ) || writeMediaStore(context, MediaStoreKind.FILES, DOCUMENTS_RELATIVE, safeName, json)
-  val downloadsOk = writePlainDir(
-    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-    ROOT_FOLDER,
-    safeName,
-    json,
-  ) || writeMediaStore(context, MediaStoreKind.DOWNLOADS, DOWNLOADS_RELATIVE, safeName, json)
-  return when {
-    rootOk -> "raiz"
-    documentsOk -> "documentos"
-    downloadsOk -> "downloads"
-    else -> "interno"
-  }
+  return if (documentsOk) "documentos" else "interno"
 }
 
 private fun safeJsonName(fileName: String): String {
@@ -166,24 +158,34 @@ private fun collectionUri(kind: MediaStoreKind): Uri {
   }
 }
 
-private fun writeLegacyDownload(json: String): Boolean {
-  return try {
-    val dir = File(
-      Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-      "SolarCalculator",
-    )
-    if (!dir.exists() && !dir.mkdirs()) return false
-    File(dir, BACKUP_FILE_NAME).writeText(json, Charsets.UTF_8)
-    true
-  } catch (_: Exception) {
-    false
-  }
-}
-
 private fun readPublic(context: Context): String? {
+  readDedicated(context)?.let { return it }
   readLegacyDownload()?.let { return it }
+  readPlainFile(Environment.getExternalStorageDirectory(), LEGACY_ROOT_FOLDER, BACKUP_FILE_NAME)?.let { return it }
+  readPlainFile(
+    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+    LEGACY_ROOT_FOLDER,
+    BACKUP_FILE_NAME,
+  )?.let { return it }
+  readPlainFile(
+    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+    LEGACY_ROOT_FOLDER,
+    BACKUP_FILE_NAME,
+  )?.let { return it }
   if (Build.VERSION.SDK_INT < 29) return null
   return readMediaStoreFile(context, MediaStoreKind.DOWNLOADS, LEGACY_RELATIVE_PATH, BACKUP_FILE_NAME)
+    ?: readMediaStoreFile(context, MediaStoreKind.FILES, LEGACY_DOCUMENTS_RELATIVE, BACKUP_FILE_NAME)
+    ?: readMediaStoreFile(context, MediaStoreKind.DOWNLOADS, LEGACY_DOWNLOADS_RELATIVE, BACKUP_FILE_NAME)
+}
+
+private fun readDedicated(context: Context): String? {
+  readPlainFile(
+    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+    DOCUMENTS_SUBDIR,
+    BACKUP_FILE_NAME,
+  )?.let { return it }
+  if (Build.VERSION.SDK_INT < 29) return null
+  return readMediaStoreFile(context, MediaStoreKind.FILES, DOCUMENTS_RELATIVE, BACKUP_FILE_NAME)
 }
 
 private fun readLegacyDownload(): String? {
@@ -227,15 +229,29 @@ private fun readMediaStoreFile(
   }
 }
 
+private fun readPlainFile(parent: File?, folderName: String, fileName: String): String? {
+  if (parent == null) return null
+  return try {
+    val file = File(File(parent, folderName), fileName)
+    if (!file.exists() || !file.canRead()) null else file.readText()
+  } catch (_: Exception) {
+    null
+  }
+}
+
 private fun readRootBackups(context: Context): String {
   val found = mutableListOf<Candidate>()
-  collectDirectory(File(Environment.getExternalStorageDirectory(), ROOT_FOLDER), found)
   collectDirectory(
-    File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), ROOT_FOLDER),
+    File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), DOCUMENTS_SUBDIR),
+    found,
+  )
+  collectDirectory(File(Environment.getExternalStorageDirectory(), LEGACY_ROOT_FOLDER), found)
+  collectDirectory(
+    File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), LEGACY_ROOT_FOLDER),
     found,
   )
   collectDirectory(
-    File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), ROOT_FOLDER),
+    File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), LEGACY_ROOT_FOLDER),
     found,
   )
   collectDirectory(
@@ -244,7 +260,8 @@ private fun readRootBackups(context: Context): String {
   )
   if (Build.VERSION.SDK_INT >= 29) {
     collectMediaStore(context, MediaStoreKind.FILES, DOCUMENTS_RELATIVE, found)
-    collectMediaStore(context, MediaStoreKind.DOWNLOADS, DOWNLOADS_RELATIVE, found)
+    collectMediaStore(context, MediaStoreKind.FILES, LEGACY_DOCUMENTS_RELATIVE, found)
+    collectMediaStore(context, MediaStoreKind.DOWNLOADS, LEGACY_DOWNLOADS_RELATIVE, found)
     collectMediaStore(context, MediaStoreKind.DOWNLOADS, LEGACY_RELATIVE_PATH, found)
   }
   val array = JSONArray()
