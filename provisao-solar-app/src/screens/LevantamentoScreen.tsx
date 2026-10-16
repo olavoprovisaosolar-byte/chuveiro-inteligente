@@ -594,6 +594,7 @@ export function LevantamentoScreen() {
                   <Pressable
                     key={record.id}
                     accessibilityRole="button"
+                    onPress={() => selectClient(record)}
                     onPressIn={() => selectClient(record)}
                     style={[styles.lookupRow, { borderBottomColor: colors.border }]}
                   >
