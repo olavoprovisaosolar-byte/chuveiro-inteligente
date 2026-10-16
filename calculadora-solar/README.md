@@ -19,7 +19,7 @@ Aplicativo Android independente (React Native + Expo + TypeScript) para:
 ## Instalação e teste local
 
 ```bash
-cd provisao-solar-app
+cd calculadora-solar
 npm install
 npm run typecheck
 npm run test:calc
@@ -53,7 +53,7 @@ Página do release: https://github.com/olavoprovisaosolar-byte/chuveiro-intelige
 
 > **Atualizando de ≤ 1.0.20:** desinstale a versão antiga antes de instalar o 1.0.21+. Os APKs anteriores eram assinados com certificados diferentes a cada build do CI (o Android bloqueia a atualização). A partir do 1.0.21 a assinatura é estável.
 
-Página auxiliar local: `provisao-solar-app/download.html`
+Página auxiliar local: `calculadora-solar/download.html`
 
 ## Gerar o arquivo `.apk` (Android)
 
@@ -67,7 +67,7 @@ eas login
 2. Configure o projeto Expo (uma vez):
 
 ```bash
-cd provisao-solar-app
+cd calculadora-solar
 eas build:configure
 ```
 
@@ -104,7 +104,7 @@ O APK geralmente fica em:
 ## Estrutura do projeto
 
 ```text
-provisao-solar-app/
+calculadora-solar/
 ├── App.tsx
 ├── app.json
 ├── eas.json
@@ -156,7 +156,7 @@ Execute os comandos abaixo **dentro da pasta do app** para criar um repositório
 ### Opção A — GitHub CLI (recomendado)
 
 ```bash
-cd provisao-solar-app
+cd calculadora-solar
 
 # 1) Inicializa o Git local
 git init
@@ -164,7 +164,7 @@ git branch -M main
 
 # 2) Cria o repositório PRIVADO no GitHub e já associa o remote origin
 #    (requer: gh auth login)
-gh repo create provisao-solar-app --private --source=. --remote=origin --description "App Android de dimensionamento fotovoltaico rápido"
+gh repo create calculadora-solar --private --source=. --remote=origin --description "App Android de dimensionamento fotovoltaico rápido"
 
 # 3) Commit inicial
 git add .
@@ -177,10 +177,10 @@ git push -u origin main
 Se o repositório já existir no GitHub e você só quiser associar o remote:
 
 ```bash
-cd provisao-solar-app
+cd calculadora-solar
 git init
 git branch -M main
-git remote add origin https://github.com/SEU_USUARIO/provisao-solar-app.git
+git remote add origin https://github.com/olavoprovisaosolar-byte/calculadora-solar.git
 git add .
 git commit -m "Initial commit: Provisão Solar app (Expo + TypeScript)"
 git push -u origin main
@@ -189,16 +189,16 @@ git push -u origin main
 ### Opção B — Criar o remoto pela interface do GitHub
 
 1. Em github.com → **New repository**
-2. Nome: `provisao-solar-app`
+2. Nome: `calculadora-solar`
 3. Visibilidade: **Private**
 4. Não marque “Add README” (o projeto já tem)
 5. Depois, no terminal:
 
 ```bash
-cd provisao-solar-app
+cd calculadora-solar
 git init
 git branch -M main
-git remote add origin git@github.com:SEU_USUARIO/provisao-solar-app.git
+git remote add origin git@github.com:olavoprovisaosolar-byte/calculadora-solar.git
 git add .
 git commit -m "Initial commit: Provisão Solar app (Expo + TypeScript)"
 git push -u origin main
