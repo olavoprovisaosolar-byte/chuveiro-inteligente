@@ -11,6 +11,7 @@ import {
   patchAppBackup,
 } from './appBackup';
 import { mergeBackups } from './backupMerge';
+import { ROOT_BACKUP_FILE } from './rootBackupPolicy';
 import { loadSurveyHistory, replaceSurveyHistory } from './surveyStore';
 
 const DRIVE_FOLDER_KEY = '@solar_calculator/drive_folder_uri';
@@ -116,15 +117,33 @@ async function androidFolder(): Promise<string> {
   return uri;
 }
 
-export async function saveCloudBackup(): Promise<string> {
+async function dedicatedBackupPayload(): Promise<string> {
   const json = await backupPayload();
-  const filename = backupFileName();
+  const root = await import('./rootFolder');
+  await root.writeRootBackupFile(json, ROOT_BACKUP_FILE);
+  const dedicated = await root.readDedicatedBackupRaw();
+  return dedicated?.trim() ? dedicated : json;
+}
+
+async function writeAndroidMirror(folder: string, filename: string, json: string): Promise<void> {
+  const entries = await FileSystem.StorageAccessFramework.readDirectoryAsync(folder);
+  const existing = entries.find((uri) => fileLabel(uri).toLowerCase() === filename.toLowerCase());
+  if (existing) {
+    await FileSystem.writeAsStringAsync(existing, json, { encoding: FileSystem.EncodingType.UTF8 });
+    return;
+  }
+  const stem = filename.replace(/\.json$/i, '');
+  const uri = await FileSystem.StorageAccessFramework.createFileAsync(folder, stem, 'application/json');
+  await FileSystem.writeAsStringAsync(uri, json, { encoding: FileSystem.EncodingType.UTF8 });
+}
+
+export async function saveCloudBackup(): Promise<string> {
+  const json = await dedicatedBackupPayload();
+  const filename = ROOT_BACKUP_FILE;
 
   if (Platform.OS === 'android') {
     const folder = await androidFolder();
-    const stem = filename.replace(/\.json$/i, '');
-    const uri = await FileSystem.StorageAccessFramework.createFileAsync(folder, stem, 'application/json');
-    await FileSystem.writeAsStringAsync(uri, json, { encoding: FileSystem.EncodingType.UTF8 });
+    await writeAndroidMirror(folder, filename, json);
     return filename;
   }
 
@@ -173,8 +192,8 @@ export async function readCloudBackup(file: CloudBackupFile): Promise<string> {
 }
 
 export async function saveLocalBackup(): Promise<'shared' | 'downloaded'> {
-  const json = await backupPayload();
-  const filename = backupFileName();
+  const json = await dedicatedBackupPayload();
+  const filename = ROOT_BACKUP_FILE;
   if (Platform.OS === 'web') {
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);

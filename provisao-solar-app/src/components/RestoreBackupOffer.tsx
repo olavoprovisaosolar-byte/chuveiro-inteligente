@@ -89,7 +89,7 @@ export function RestoreBackupOffer() {
             <Text style={[styles.kicker, { color: colors.primary }]}>Calculadora Solar</Text>
             <Text style={[styles.title, { color: colors.text }]}>Nenhum backup encontrado</Text>
             <Text style={[styles.message, { color: colors.textSecondary }]}>
-              Não há banco ativo nem arquivo recente na pasta CalculadoraSolar_Backups. Escolha de onde restaurar.
+              Não há banco ativo nem arquivo recente em Meus Documentos/Calculadora Solar/Backups. Escolha de onde restaurar.
             </Text>
             <PrimaryButton
               label="Procurar Backup em outra Pasta Local"

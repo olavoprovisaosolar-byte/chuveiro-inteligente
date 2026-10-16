@@ -456,8 +456,8 @@ export function ModulosScreen() {
         Placas, telhado, carga e o consumo são gravados sozinhos. Atualizar o aplicativo recupera
         esses dados na hora. Ao desinstalar, o Android pergunta se os dados do Solar Calculator
         devem ser mantidos: deixe essa opção marcada para a próxima instalação trazer tudo de volta.
-        Cada alteração também grava Download/SolarCalculator/solar-calculator-backup.json para
-        guardar no Drive.
+        Cada alteração também grava Meus Documentos/Calculadora Solar/Backups/solar-calculator-backup.json.
+        A sincronização envia esse arquivo para a pasta espelho no Google Drive.
       </Text>
       <Text style={[styles.backupCount, { color: colors.text }]}>
         Customizadas salvas: {customModules.length}

@@ -11,6 +11,7 @@ import {
   saveCloudBackup,
   saveLocalBackup,
 } from '../services/driveSync';
+import { ROOT_BACKUP_DISPLAY, ROOT_BACKUP_FILE } from '../services/rootBackupPolicy';
 import { useTheme } from '../theme/ThemeContext';
 import { ActionDialog } from './ActionDialog';
 import { PrimaryButton } from './PrimaryButton';
@@ -129,11 +130,11 @@ export function DriveSyncSection() {
       <Text style={[styles.statusLabel, { color: colors.text }]}>Status da conexão</Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>{status}</Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
-        A pasta padrão neste aparelho é CalculadoraSolar_Backups, na raiz do armazenamento ou em Documentos. No seletor do Drive, escolha a pasta dos backups na nuvem.
+        O arquivo {ROOT_BACKUP_FILE} fica em {ROOT_BACKUP_DISPLAY}. A sincronização lê esse arquivo e envia a cópia para a pasta espelho no Google Drive.
       </Text>
       <PrimaryButton label="Vincular Google Drive" onPress={onLink} loading={busy === 'link'} disabled={busy !== null} />
       <PrimaryButton
-        label="Fazer Backup na Nuvem (Google Drive)"
+        label="Sincronização com o Google Drive"
         onPress={onCloud}
         loading={busy === 'cloud'}
         disabled={busy !== null}
