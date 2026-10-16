@@ -12,6 +12,10 @@ import {
   suggestInverterRange,
 } from '../calculations';
 import { explainProviderError } from '../aiErrors';
+import { apkFileName, apkReleaseTag } from '../apkRelease';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { datasheetIsComplete, parseModuleDatasheet } from '../moduleDatasheet';
 import { mergeBackups, type MergeableBackup } from '../../services/backupMerge';
 import { mergeSurveyHistory, normalizeSurveyHistory, removeSurvey, searchSurveys, shouldShowClientLookup } from '../surveyHistory';
@@ -397,6 +401,20 @@ assert(searchSurveys(joao, 'joao').length === 1, 'Busca por joao encontra João'
 assert(searchSurveys(joao, 'JOÃO').length === 1, 'Busca ignora maiúsculas e acento');
 assert(searchSurveys([...clients, ...joao], 'maria').length === 0, 'Nome ausente não entra na lista');
 assert(removeSurvey([...clients, ...joao], 'joao-1').length === 1, 'Excluir tira só o cliente escolhido');
+
+assert(apkFileName('1.0.42') === 'SolarCalculator-v1.0.42.apk', 'Nome do APK inclui a versão');
+assert(apkFileName('1.0.43') === 'SolarCalculator-v1.0.43.apk', 'Nome do APK acompanha a versão nova');
+assert(apkFileName('v1.0.43') === 'SolarCalculator-v1.0.43.apk', 'Nome do APK ignora o prefixo v');
+assert(apkReleaseTag('1.0.43') === 'solar-calculator-v1.0.43', 'Tag de release segue a versão');
+{
+  const pkg = JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../package.json'), 'utf8'),
+  ) as { version: string };
+  assert(
+    apkFileName(pkg.version) === `SolarCalculator-v${pkg.version}.apk`,
+    'Nome do APK lê a versão do package.json',
+  );
+}
 
 assert(ROOT_BACKUP_FOLDER === 'Calculadora Solar/Backups', 'Pasta dos backups em Documentos');
 assert(
