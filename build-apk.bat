@@ -16,12 +16,24 @@ if not defined JAVA_BIN (
     exit /b 1
 )
 
-echo [1/3] Sincronizando arquivos web...
+echo [1/4] Sincronizando arquivos web...
 powershell -ExecutionPolicy Bypass -File "%ROOT%scripts\sync-assets.ps1"
 if errorlevel 1 exit /b 1
 
 echo.
-echo [2/3] Verificando Android SDK...
+echo [2/4] Lendo versao do APK...
+for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "(Select-String -Path '%ROOT%android\app\build.gradle.kts' -Pattern 'versionName\s*=\s*\"([^\"]+)\"').Matches[0].Groups[1].Value.Trim().TrimStart('v','V')"`) do set "APP_VERSION=%%v"
+if not defined APP_VERSION (
+    echo [ERRO] Nao foi possivel ler versionName em android\app\build.gradle.kts
+    pause
+    exit /b 1
+)
+set "APK_NAME=ChuveiroInteligente-v%APP_VERSION%.apk"
+echo Versao: %APP_VERSION%
+echo Arquivo: %APK_NAME%
+
+echo.
+echo [3/4] Verificando Android SDK...
 if not exist "%ROOT%android\local.properties" (
     if exist "%LOCALAPPDATA%\Android\Sdk" (
         echo sdk.dir=%LOCALAPPDATA:\=\\%\Android\Sdk> "%ROOT%android\local.properties"
@@ -49,7 +61,7 @@ if not exist "%ROOT%android\local.properties" (
 )
 
 echo.
-echo [3/3] Compilando APK debug...
+echo [4/4] Compilando APK debug...
 cd /d "%ROOT%android"
 call gradlew.bat assembleDebug --no-daemon
 
@@ -59,8 +71,13 @@ if exist "app\build\outputs\apk\debug\app-debug.apk" (
     echo  APK gerado com sucesso!
     echo  %ROOT%android\app\build\outputs\apk\debug\app-debug.apk
     echo ============================================
-    copy /Y "app\build\outputs\apk\debug\app-debug.apk" "%ROOT%ChuveiroInteligente-debug.apk"
-    echo Copia salva em: %ROOT%ChuveiroInteligente-debug.apk
+    if not exist "%ROOT%downloads" mkdir "%ROOT%downloads"
+    del /Q "%ROOT%downloads\ChuveiroInteligente.apk" 2>nul
+    del /Q "%ROOT%downloads\ChuveiroInteligente-v*.apk" 2>nul
+    copy /Y "app\build\outputs\apk\debug\app-debug.apk" "%ROOT%downloads\%APK_NAME%"
+    copy /Y "app\build\outputs\apk\debug\app-debug.apk" "%ROOT%%APK_NAME%"
+    echo Copia salva em: %ROOT%downloads\%APK_NAME%
+    echo Copia salva em: %ROOT%%APK_NAME%
 ) else (
     echo [ERRO] Falha na compilacao. Use Android Studio.
 )

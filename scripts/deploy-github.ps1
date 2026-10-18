@@ -70,7 +70,15 @@ if ($LASTEXITCODE -eq 0) {
     New-Item -ItemType Directory -Force -Path "dist" | Out-Null
     gh run download $runId -n chuveiro-inteligente-apk -D dist
     Write-Host ""
-    Write-Host "APK baixado em: $root\dist\app-debug.apk" -ForegroundColor Green
+    $apk = Get-ChildItem -Path "$root\dist" -Filter "ChuveiroInteligente-v*.apk" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $apk) {
+        $apk = Get-ChildItem -Path "$root\dist" -Filter "*.apk" -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if ($apk) {
+        Write-Host "APK baixado em: $($apk.FullName)" -ForegroundColor Green
+    } else {
+        Write-Host "APK baixado em: $root\dist\" -ForegroundColor Green
+    }
     $repoUrl = gh repo view --json url --jq .url
     Write-Host "Repositorio: $repoUrl" -ForegroundColor Cyan
 } else {
