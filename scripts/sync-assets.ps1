@@ -9,6 +9,14 @@ if (-not (Test-Path $www)) {
 }
 
 New-Item -ItemType Directory -Force -Path $assets | Out-Null
-Copy-Item (Join-Path $www "*") $assets -Force
+
+# Apenas arquivos do app — nao copiar downloads/ nem APKs
+$files = @("index.html", "style.css", "app.js", "mqtt.min.js")
+foreach ($f in $files) {
+    $src = Join-Path $www $f
+    if (Test-Path $src) {
+        Copy-Item $src (Join-Path $assets $f) -Force
+    }
+}
 
 Write-Host "Assets sincronizados para android/app/src/main/assets/" -ForegroundColor Green

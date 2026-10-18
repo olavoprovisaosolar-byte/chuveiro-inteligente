@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,20 +26,54 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Sync web assets
-        run: |
-          mkdir -p android/app/src/main/assets
-          cp www/index.html www/style.css www/app.js www/mqtt.min.js android/app/src/main/assets/
+        run: bash scripts/sync-assets.sh
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x android/gradlew
+      - name: Grant execute permission for scripts
+        run: chmod +x android/gradlew scripts/apk-version.sh scripts/apk-file-name.sh scripts/sync-apk-download-pages.sh
+
+      - name: Resolve APK file name from versionName
+        id: apk
+        run: |
+          VERSION=$(bash scripts/apk-version.sh)
+          APK_NAME=$(bash scripts/apk-file-name.sh)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "APK will be published as $APK_NAME (v$VERSION)"
 
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
+      - name: Prepare versioned download APK
+        run: |
+          mkdir -p downloads
+          rm -f downloads/ChuveiroInteligente.apk downloads/ChuveiroInteligente-v*.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk "downloads/${{ steps.apk.outputs.name }}"
+          ls -lh "downloads/${{ steps.apk.outputs.name }}"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: chuveiro-inteligente-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: downloads/ChuveiroInteligente-v*.apk
           retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: chuveiro-v${{ steps.apk.outputs.version }}
+          name: Chuveiro Inteligente v${{ steps.apk.outputs.version }}
+          body: |
+            ## Downloads
+
+            - **APK Android:** `${{ steps.apk.outputs.name }}`
+            - **Link raw:** https://github.com/${{ github.repository }}/raw/${{ github.ref_name }}/downloads/${{ steps.apk.outputs.name }}
+            - **App web:** [download.html](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/download.html)
+
+            O arquivo já vem nomeado com a versão (`versionName` em `android/app/build.gradle.kts`).
+
+            Instalação: no Android, permita instalar apps de fontes desconhecidas para o navegador/arquivos.
+          files: downloads/${{ steps.apk.outputs.name }}
+          generate_release_notes: true
+          make_latest: true
