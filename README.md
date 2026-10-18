@@ -4,16 +4,16 @@ App mobile + ESP32 para controle de chuveiro elétrico com monitoramento de prot
 
 ## Baixar o APK agora
 
-**Arquivo no repositório:** [downloads/ChuveiroInteligente-v1.0.0.apk](./downloads/ChuveiroInteligente-v1.0.0.apk)
+**Arquivo no repositório:** [downloads/ChuveiroInteligente-v1.0.1.apk](./downloads/ChuveiroInteligente-v1.0.1.apk)
 
 **Link direto (GitHub raw):**  
-https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/raw/master/downloads/ChuveiroInteligente-v1.0.0.apk
+https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/raw/master/downloads/ChuveiroInteligente-v1.0.1.apk
 
 **Página de download:** [download.html](./download.html)
 
 ### Instalar no Android
 
-1. Abra o link no celular e baixe `ChuveiroInteligente-v1.0.0.apk`.
+1. Abra o link no celular e baixe `ChuveiroInteligente-v1.0.1.apk`.
 2. Permita instalar apps de fontes desconhecidas, se o Android pedir.
 3. Abra o app **Chuveiro Inteligente**.
 
@@ -23,7 +23,7 @@ https://github.com/olavoprovisaosolar-byte/chuveiro-inteligente/raw/master/downl
 python3 -m http.server 8080
 ```
 
-Acesse `http://localhost:8080/download.html` para baixar o APK pela página, ou `http://localhost:8080/downloads/ChuveiroInteligente-v1.0.0.apk` para o arquivo direto.
+Acesse `http://localhost:8080/download.html` para baixar o APK pela página, ou `http://localhost:8080/downloads/ChuveiroInteligente-v1.0.1.apk` para o arquivo direto.
 
 ## Desenvolvimento
 

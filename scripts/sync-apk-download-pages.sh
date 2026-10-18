@@ -30,6 +30,10 @@ replace_in_file() {
   content="$(printf '%s' "$content" | sed -E \
     -e "s|(<li><span>Versão</span> <strong>)[^<]*(</strong></li>)|\1${VERSION} (debug)\2|")"
 
+  # Rodapé do app web
+  content="$(printf '%s' "$content" | sed -E \
+    -e "s|Chuveiro Elétrico Inteligente v[0-9]+\.[0-9]+(\.[0-9]+)?|Chuveiro Elétrico Inteligente v${VERSION}|g")"
+
   # Links raw do GitHub (branch pode ter barra, ex. cursor/nome-xxx)
   content="$(printf '%s' "$content" | sed -E \
     -e "s|https://github\.com/${REPO}/raw/.+/downloads/${APK_NAME}|${RAW_URL}|g")"

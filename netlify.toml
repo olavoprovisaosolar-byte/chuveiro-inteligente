@@ -8,12 +8,12 @@
   for = "/downloads/*.apk"
   [headers.values]
     Content-Type = "application/vnd.android.package-archive"
-    Content-Disposition = 'attachment; filename="ChuveiroInteligente-v1.0.0.apk"'
+    Content-Disposition = 'attachment; filename="ChuveiroInteligente-v1.0.1.apk"'
     Cache-Control = "public, max-age=3600"
 
 [[redirects]]
   from = "/apk"
-  to = "/downloads/ChuveiroInteligente-v1.0.0.apk"
+  to = "/downloads/ChuveiroInteligente-v1.0.1.apk"
   status = 302
 
 [[redirects]]
